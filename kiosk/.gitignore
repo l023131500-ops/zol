@@ -1,0 +1,28 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Env / secrets
+.env
+*.env.local
+
+# Server data (SQLite)
+server/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.apk
+*.keystore
+*.jks
+
+# OS / editor
+.DS_Store
+*.log
