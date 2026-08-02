@@ -1,0 +1,72 @@
+@import '@kesef/ui/styles.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Assistant is bundled locally via @fontsource-variable/assistant
+   (imported in layout.tsx) — no runtime CDN request. */
+:root {
+  --font-sans: 'Assistant Variable', 'Assistant', 'Heebo', system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    background-color: var(--grey-50);
+    color: var(--grey-700);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.625;
+  }
+
+  h1,
+  h2,
+  h3 {
+    color: var(--navy-700);
+    text-wrap: balance;
+  }
+
+  a {
+    color: var(--blue-600);
+  }
+
+  /* Visible focus ring everywhere — 2px, ≥3:1 contrast (WCAG 2.4.7). */
+  :focus-visible {
+    outline: 2px solid var(--blue-600);
+    outline-offset: 2px;
+  }
+}
+
+/* Print: the meeting briefing should print clean (no chrome). */
+@media print {
+  header,
+  footer,
+  nav,
+  .skip-link {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  main {
+    padding: 0;
+  }
+}
+
+/* Skip-to-content link — first focusable element on every page. */
+.skip-link {
+  position: absolute;
+  inset-inline-start: 1rem;
+  top: -3rem;
+  z-index: 50;
+  border-radius: 0.5rem;
+  background: var(--navy-700);
+  padding: 0.5rem 1rem;
+  color: var(--white);
+  transition: top var(--dur-transition) var(--ease-standard);
+}
+.skip-link:focus {
+  top: 1rem;
+}

@@ -1,0 +1,64 @@
+/* ============================================================
+   kesef design system — tokens (03_DESIGN_SYSTEM.md §2, §3, §9)
+   Imported once by the web app's global stylesheet.
+   ============================================================ */
+
+:root {
+  /* בסיס */
+  --navy-900: #12233f;
+  --navy-700: #1f3864; /* כותרות ראשיות */
+  --blue-600: #2e5c8a; /* כותרות משנה, קישורים */
+  --blue-400: #6e9bc5;
+  --blue-100: #e7eef7; /* רקע עדין */
+  --grey-700: #3f4a5a; /* טקסט */
+  --grey-500: #626d7b; /* טקסט משני — מכוונן ל-≥4.5:1 על grey-50 (WCAG AA) */
+  --grey-200: #d9dfe8; /* גבולות */
+  --grey-50: #f6f8fb; /* רקע עמוד */
+  --white: #ffffff;
+
+  /* ביצוע מול תכנון — הצבעים היחידים שמותר להם להיות ירוק/אדום */
+  --exec-over: #1e7a50;
+  --exec-under: #b3341f;
+
+  /* דגלי אזהרה — ענבר, לא אדום. מכווננים ל-≥4.5:1 כטקסט על רקעי הדגל (WCAG AA) */
+  --alert-info: #43648f;
+  --alert-notice: #86640a;
+  --alert-high: #964e12;
+
+  /* קטגוריות — מובחנות גם בעיוורון צבעים */
+  --cat-education: #2e5c8a;
+  --cat-welfare: #7a4e9b;
+  --cat-infrastructure: #1e7a50;
+  --cat-culture: #b8860b;
+  --cat-religion: #8b5e00;
+  --cat-security: #5a6b7d;
+  --cat-sanitation: #2a8c8c;
+  --cat-administration: #8a5a6b;
+  --cat-debt: #6b4226;
+
+  /* typography */
+  --font-sans: 'Assistant', 'Heebo', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Consolas', monospace;
+
+  /* motion */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-micro: 150ms;
+  --dur-transition: 250ms;
+  --dur-reveal: 400ms;
+}
+
+/* Tabular figures everywhere — mandatory in tables and for every number. */
+html {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

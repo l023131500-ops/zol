@@ -1,0 +1,25 @@
+{
+  "name": "kesef-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "פלטפורמת שקיפות תקציבית לרשויות מקומיות בישראל",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @kesef/web dev",
+    "build": "pnpm --filter @kesef/web build",
+    "start": "pnpm --filter @kesef/web start",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "prettier-plugin-tailwindcss": "^0.6.9",
+    "typescript": "^5.7.3"
+  }
+}

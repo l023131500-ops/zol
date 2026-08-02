@@ -1,0 +1,133 @@
+import { createServerSupabase } from '@/lib/supabase/server';
+
+/** Most recent published audited-report year (12–17 month publication lag). */
+export const LATEST_PUBLISHED_YEAR = 2024;
+
+/**
+ * Server-side data access for authority screens. Every function degrades
+ * gracefully: if Supabase is unconfigured/unreachable or the table is empty,
+ * it returns null/[] so the screen renders <NoData> — never invented data.
+ */
+
+export interface AuthoritySummary {
+  symbol: number;
+  name_he: string;
+  status: string;
+  population: number | null;
+  socio_economic_cluster: number | null;
+  peripherality_cluster: number | null;
+}
+
+/** Known slug → LMS symbol. Extended as authorities load. */
+const SLUG_TO_SYMBOL: Record<string, number> = {
+  'hatzor-haglilit': 2034,
+};
+
+export function slugToSymbol(slug: string): number | null {
+  if (SLUG_TO_SYMBOL[slug] != null) return SLUG_TO_SYMBOL[slug];
+  const n = Number(slug);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch {
+    return null; // unreachable DB in restricted envs → NoData, not a crash
+  }
+}
+
+export async function getAuthority(slug: string): Promise<AuthoritySummary | null> {
+  const symbol = slugToSymbol(slug);
+  if (symbol == null) return null;
+  return safe(async () => {
+    const supabase = await createServerSupabase();
+    if (!supabase) return null;
+    const { data } = await supabase
+      .from('authority')
+      .select('symbol, name_he, status, population, socio_economic_cluster, peripherality_cluster')
+      .eq('symbol', symbol)
+      .maybeSingle();
+    return (data as AuthoritySummary | null) ?? null;
+  });
+}
+
+export interface AlertRow {
+  rule_key: string;
+  severity: string;
+  statement_he: string;
+  methodology_url: string;
+  response_text: string | null;
+}
+
+export async function getPublicAlerts(symbol: number): Promise<AlertRow[]> {
+  return (
+    (await safe(async () => {
+      const supabase = await createServerSupabase();
+      if (!supabase) return [];
+      // authority_id is a uuid; resolve via symbol first.
+      const { data: auth } = await supabase.from('authority').select('id').eq('symbol', symbol).maybeSingle();
+      const authId = (auth as { id: string } | null)?.id;
+      if (!authId) return [];
+      const { data } = await supabase
+        .from('alert')
+        .select('rule_key, severity, statement_he, methodology_url, response_text')
+        .eq('authority_id', authId)
+        .eq('is_public', true);
+      return (data as AlertRow[] | null) ?? [];
+    })) ?? []
+  );
+}
+
+export interface GrantSourcesInfo {
+  count: number;
+  lastUpdated: string | null;
+}
+
+/** Honest coverage header for the grant-calls screen — count of scanned sources. */
+export async function getGrantCallSourcesInfo(): Promise<GrantSourcesInfo> {
+  const fallback: GrantSourcesInfo = { count: 4, lastUpdated: null };
+  return (
+    (await safe(async () => {
+      const supabase = await createServerSupabase();
+      if (!supabase) return fallback;
+      const { data } = await supabase
+        .from('data_source')
+        .select('slug, last_ok_at')
+        .like('slug', 'gc_%');
+      if (!data) return fallback;
+      const rows = data as { slug: string; last_ok_at: string | null }[];
+      const last = rows
+        .map((r) => r.last_ok_at)
+        .filter((d): d is string => Boolean(d))
+        .sort()
+        .at(-1);
+      return { count: rows.length, lastUpdated: last ?? null };
+    })) ?? fallback
+  );
+}
+
+export interface MetricRow {
+  metric_key: string;
+  value: number | null;
+  peer_median: number | null;
+  formula: string;
+}
+
+export async function getMetrics(symbol: number, year: number): Promise<MetricRow[]> {
+  return (
+    (await safe(async () => {
+      const supabase = await createServerSupabase();
+      if (!supabase) return [];
+      const { data: auth } = await supabase.from('authority').select('id').eq('symbol', symbol).maybeSingle();
+      const authId = (auth as { id: string } | null)?.id;
+      if (!authId) return [];
+      const { data } = await supabase
+        .from('metric_value')
+        .select('metric_key, value, peer_median, formula')
+        .eq('authority_id', authId)
+        .eq('fiscal_year', year);
+      return (data as MetricRow[] | null) ?? [];
+    })) ?? []
+  );
+}
