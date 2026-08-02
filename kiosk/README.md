@@ -76,6 +76,8 @@ npm install && npm start
   אפליקציות ממקור לא ידוע, safe‑boot ואיפוס — **אך קוראי כרטיסים (USB HID/מסוף)
   ממשיכים לעבוד**, כי אינם אחסון. בדיוק ההבחנה: מותר קורא סליקה, אסור דיסק‑און‑קי.
 
+מדריך מלא (כולל **נאייקס + פאימי**, מסופי Wi‑Fi/USB וקוראי מגנט): [`docs/payment-he.md`](docs/payment-he.md).
+
 ## שליטה מרחוק — פקודות נתמכות
 
 `reload` · `set_url` · `screen_on` · `screen_off` · `clear_cache` · `lock` ·
