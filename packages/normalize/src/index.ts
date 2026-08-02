@@ -9,3 +9,4 @@ export * from './validation';
 export * from './chart-of-accounts';
 export * from './pivot';
 export * from './cross-check';
+export * from './officials';

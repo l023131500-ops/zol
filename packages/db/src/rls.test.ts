@@ -62,6 +62,12 @@ describe('kesef schema move + hardening (migrations 0003-0006)', () => {
     // The fixed policy checks app_user scope, never subqueries alert itself.
     expect(respondFix).not.toMatch(/from\s+kesef\.alert|from\s+alert\b/);
   });
+
+  it('officials cannot store contact details without a source document (0007)', () => {
+    const guard = mig('0007_official_contact_source.sql');
+    expect(guard).toContain('official_contact_needs_source');
+    expect(guard).toMatch(/official_phone is null and official_email is null/);
+  });
 });
 
 const hasLiveDb = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
