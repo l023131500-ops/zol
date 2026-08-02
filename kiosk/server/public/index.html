@@ -11,8 +11,22 @@
        request, and NetFree intermittently blocks fonts.googleapis.com entirely —
        in which case a blocking stylesheet holds the whole page until it fails.
        The fallback stack is declared in style.css, so the page reads immediately. -->
-  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet" media="print" onload="this.media='all'" />
+  <link id="webfonts" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet" media="print" />
+  <!-- ⚠️ NOT an onload="" attribute. This server sends a CSP with
+       script-src-attr 'none' (helmet's default), which blocks inline event
+       handlers outright — the swap silently never ran and the page rendered
+       with no web fonts at all, while logging a CSP violation to the console.
+       A <script> block is allowed here because script-src includes
+       'unsafe-inline', so this does the same job within the policy. -->
+  <script>
+    (function () {
+      var l = document.getElementById('webfonts');
+      if (!l) return;
+      var show = function () { l.media = 'all'; };
+      if (l.sheet) show(); else l.addEventListener('load', show);
+    })();
+  </script>
   <noscript><link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
   <!-- Document-relative, not root-relative: this page is served both at the
        root (Railway URL, local dev) and under more30.com/kiosk/. A leading
