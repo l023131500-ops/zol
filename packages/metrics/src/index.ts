@@ -10,3 +10,4 @@ export * from './language-guard';
 export * from './format';
 export * from './methodology';
 export * from './arnona';
+export * from './research';

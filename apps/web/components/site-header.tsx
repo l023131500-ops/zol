@@ -4,6 +4,7 @@ const NAV = [
   { href: '/product', label: 'המוצר' },
   { href: '/for-municipalities', label: 'לרשויות' },
   { href: '/pricing', label: 'מחירים' },
+  { href: '/research', label: 'מחקר' },
   { href: '/methodology', label: 'מתודולוגיה' },
   { href: '/quality', label: 'איכות הנתונים' },
   { href: '/about', label: 'אודות' },
