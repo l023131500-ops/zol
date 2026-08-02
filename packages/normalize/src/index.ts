@@ -1,11 +1,8 @@
 /**
  * @kesef/normalize — normalization & verification (Wave 2).
- *
- * Cross-year schema-drift mapping (task 16, critical), MoI code mapping and
- * EAV→fact pivot (task 17), the 7 validation rules (task 18) and the
- * cross-source verification engine (task 21 — the headline finding).
- *
- * Rule: never write a generic cross-year join. Every year passes through its
- * explicit map.
+ * Cross-year schema-drift mapping (task 16), the 7 validation rules (task 18),
+ * MoI code mapping + EAV→fact pivot (task 17) and cross-source verification
+ * (task 21) build on these primitives.
  */
-export const NORMALIZE_PLACEHOLDER = true;
+export * from './schema-drift';
+export * from './validation';
