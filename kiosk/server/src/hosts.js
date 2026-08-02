@@ -21,8 +21,11 @@ export function hostAllowed(host, csv) {
 export function hostsForUrl(url, extraCsv) {
   let base = '';
   try { base = new URL(url).host.toLowerCase(); } catch { /* ignore */ }
-  const merged = new Set(parseHosts(extraCsv));
-  if (base) merged.add(base);
+  // Normalise the extras here rather than at each call site. This is the one
+  // funnel every allow-list passes through on its way into storage, and a host
+  // that keeps its scheme and path matches nothing on the device.
+  const merged = new Set(normalizeHostList(extraCsv));
+  if (base) merged.add(normalizeHostInput(base) || base);
   return [...merged].join(',');
 }
 

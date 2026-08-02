@@ -1,7 +1,7 @@
 import express from 'express';
 import { db, logEvent } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { hostsForUrl } from '../hosts.js';
+import { hostsForUrl, normalizeHostCsv } from '../hosts.js';
 
 // The per-customer link library: named event/venue links to lock devices onto.
 const router = express.Router();

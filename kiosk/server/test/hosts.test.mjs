@@ -66,3 +66,14 @@ test('the device home URL is always part of its own allow-list', () => {
   assert.equal(hostsForUrl('https://venue.example.com/e/1', 'pay.gw.com'), 'pay.gw.com,venue.example.com');
   assert.ok(parseHosts(hostsForUrl('https://venue.example.com/e/1', '')).includes('venue.example.com'));
 });
+
+test('every write path normalises, not just the device one', () => {
+  // hostsForUrl is the funnel the link library writes through. It used to pass
+  // extras straight to storage, so a pasted URL was saved verbatim in the
+  // library and then handed to whichever device adopted that link.
+  assert.equal(
+    hostsForUrl('https://venue.example.com/event/9',
+                'https://pay.example.com/checkout?x=1, PAY.example.com , nonsense, secure.cardcom.co.il:443'),
+    'pay.example.com,secure.cardcom.co.il,venue.example.com',
+  );
+});
