@@ -57,7 +57,15 @@ h1, h2, h3 { line-height: 1.25; margin: 0 0 .4em; }
 .nav-links a:hover { color: #fff; }
 
 .hero {
-  background:
+  /* background-color separately from background-image, and not merged into the
+     `background` shorthand: axe cannot resolve a gradient, so it falls back to
+     the nearest solid ancestor — which is the light page background. That made
+     the white hero badges measure 1.07:1 against a surface they never sit on.
+     The solid navy underneath is what the text actually contrasts with, and
+     stating it is what lets the audit measure the truth. Same reason
+     .cta-band declares one. */
+  background-color: var(--navy);
+  background-image:
     radial-gradient(900px 500px at 85% -10%, rgba(47,107,255,.35), transparent),
     radial-gradient(700px 500px at 10% 10%, rgba(34,197,94,.18), transparent),
     linear-gradient(180deg, var(--navy), var(--navy-2));
