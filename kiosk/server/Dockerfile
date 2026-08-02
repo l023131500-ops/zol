@@ -12,6 +12,8 @@ COPY . .
 ENV NODE_ENV=production
 ENV PORT=8080
 EXPOSE 8080
-VOLUME ["/app/data"]
+# Note: no Dockerfile `VOLUME` — Railway rejects it. Attach a Railway Volume
+# mounted at /app/data (or set DB_PATH to the mount path) for persistent storage.
+# The app creates the data directory at startup (see src/db.js).
 
 CMD ["node", "src/index.js"]
