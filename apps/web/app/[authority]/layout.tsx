@@ -10,6 +10,8 @@ const TABS = [
   { seg: 'compare', label: 'השוואה' },
   { seg: 'alerts', label: 'תמרורי אזהרה' },
   { seg: 'gap', label: 'מה נתקע' },
+  { seg: 'grant-calls', label: 'קולות קוראים' },
+  { seg: 'briefing', label: 'תיק לפגישה' },
   { seg: 'demographics', label: 'אוכלוסייה' },
   { seg: 'calculators', label: 'מחשבונים' },
 ];

@@ -79,6 +79,34 @@ export async function getPublicAlerts(symbol: number): Promise<AlertRow[]> {
   );
 }
 
+export interface GrantSourcesInfo {
+  count: number;
+  lastUpdated: string | null;
+}
+
+/** Honest coverage header for the grant-calls screen — count of scanned sources. */
+export async function getGrantCallSourcesInfo(): Promise<GrantSourcesInfo> {
+  const fallback: GrantSourcesInfo = { count: 4, lastUpdated: null };
+  return (
+    (await safe(async () => {
+      const supabase = await createServerSupabase();
+      if (!supabase) return fallback;
+      const { data } = await supabase
+        .from('data_source')
+        .select('slug, last_ok_at')
+        .like('slug', 'gc_%');
+      if (!data) return fallback;
+      const rows = data as { slug: string; last_ok_at: string | null }[];
+      const last = rows
+        .map((r) => r.last_ok_at)
+        .filter((d): d is string => Boolean(d))
+        .sort()
+        .at(-1);
+      return { count: rows.length, lastUpdated: last ?? null };
+    })) ?? fallback
+  );
+}
+
 export interface MetricRow {
   metric_key: string;
   value: number | null;

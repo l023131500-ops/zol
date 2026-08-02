@@ -39,6 +39,22 @@
   }
 }
 
+/* Print: the meeting briefing should print clean (no chrome). */
+@media print {
+  header,
+  footer,
+  nav,
+  .skip-link {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  main {
+    padding: 0;
+  }
+}
+
 /* Skip-to-content link — first focusable element on every page. */
 .skip-link {
   position: absolute;
