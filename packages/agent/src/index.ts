@@ -6,3 +6,5 @@
  */
 export * from './validate-answer';
 export * from './mcp';
+export * from './router';
+export * from './terms';
