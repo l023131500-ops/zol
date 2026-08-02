@@ -13,6 +13,7 @@ export {
 export { ValueStatus, type ValueStatusProps, type ValueStatusKind } from './value-status';
 export { YearSwitcher, type YearSwitcherProps } from './year-switcher';
 export { GeoDisclaimer, type GeoDisclaimerProps } from './geo-disclaimer';
+export { FreshnessBadge, type FreshnessBadgeProps } from './freshness-badge';
 export {
   Button,
   type ButtonProps,

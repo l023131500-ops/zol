@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Bdi } from '@kesef/ui';
-import { getAuthority, slugToSymbol } from '@/lib/data/authority';
+import { Bdi, FreshnessBadge } from '@kesef/ui';
+import { getAuthority, slugToSymbol, LATEST_PUBLISHED_YEAR } from '@/lib/data/authority';
 
 const TABS = [
   { seg: '', label: 'הכסף שלי' },
@@ -28,7 +28,10 @@ export default async function AuthorityLayout({
     <div>
       <header className="border-b border-[var(--grey-200)] bg-[var(--white)]">
         <div className="mx-auto max-w-6xl px-4 py-6">
-          <p className="text-sm font-semibold uppercase tracking-wide text-[var(--blue-600)]">הכסף שלי</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold uppercase tracking-wide text-[var(--blue-600)]">הכסף שלי</p>
+            <FreshnessBadge latestYear={LATEST_PUBLISHED_YEAR} />
+          </div>
           <h1 className="mt-1 text-3xl font-bold text-[var(--navy-700)]">{displayName}</h1>
           {summary ? (
             <p className="mt-2 text-sm text-[var(--grey-500)]">

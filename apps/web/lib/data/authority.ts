@@ -1,5 +1,8 @@
 import { createServerSupabase } from '@/lib/supabase/server';
 
+/** Most recent published audited-report year (12–17 month publication lag). */
+export const LATEST_PUBLISHED_YEAR = 2024;
+
 /**
  * Server-side data access for authority screens. Every function degrades
  * gracefully: if Supabase is unconfigured/unreachable or the table is empty,

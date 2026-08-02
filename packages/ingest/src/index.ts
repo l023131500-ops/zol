@@ -5,6 +5,7 @@
  */
 export * from './datagov';
 export * from './sync-financial';
+export * from './packages';
 
 export interface SyncResult {
   sourceSlug: string;
