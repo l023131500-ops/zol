@@ -5,3 +5,4 @@
  * in code, not the prompt.
  */
 export * from './validate-answer';
+export * from './mcp';
