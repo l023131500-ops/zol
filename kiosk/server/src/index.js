@@ -33,23 +33,59 @@ app.use(helmet({
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 
-app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+const base = config.basePath;
 
-app.use('/api/auth', authRoutes);
-app.use('/api', deviceRoutes);
-app.use('/api', linkRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/agent', agentRoutes);
+// Health stays at the true root as well as under the prefix: Railway's
+// healthcheck hits the container directly and knows nothing about /kiosk.
+const health = (req, res) => res.json({ ok: true, time: new Date().toISOString(), basePath: base || '/' });
+app.get('/api/health', health);
+
+// A visitor who types more30.com/kiosk (no trailing slash) must land on the
+// same page as more30.com/kiosk/ — the HTML uses document-relative asset URLs
+// so that it works at any prefix, and those only resolve from the directory
+// form. Registered before the mount so it wins the exact match.
+//
+// ⚠️ Not `app.get(base, …)`: with Express's default non-strict routing that
+// route also matches `/kiosk/`, which redirects the directory form to itself
+// forever. Comparing `req.path` exactly is what makes the two distinct.
+if (base) {
+  app.use((req, res, next) => {
+    if (req.path !== base) return next();
+    res.redirect(301, base + '/' + req.originalUrl.slice(req.path.length));
+  });
+}
+
+const site = express.Router();
+
+site.get('/api/health', health);
+site.use('/api/auth', authRoutes);
+site.use('/api', deviceRoutes);
+site.use('/api', linkRoutes);
+site.use('/api/admin', adminRoutes);
+site.use('/api/agent', agentRoutes);
+
+// Search engines index the real site only. A staging deployment that gets
+// indexed competes with production for the same queries and is very hard to
+// walk back, so the block is the default and production is the exception.
+site.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(
+    config.env === 'production'
+      ? 'User-agent: *\nAllow: /\n'
+      : 'User-agent: *\nDisallow: /\n',
+  );
+});
 
 // Serve the marketing site + console (static, no build step).
-app.use(express.static(config.publicDir, { extensions: ['html'] }));
+site.use(express.static(config.publicDir, { extensions: ['html'] }));
 
 // Serve the Hebrew docs (linked from the in-console guide), if present.
 const docsDir = path.resolve(config.root, '../docs');
-if (fs.existsSync(docsDir)) app.use('/docs', express.static(docsDir));
+if (fs.existsSync(docsDir)) site.use('/docs', express.static(docsDir));
 
 // SPA-ish fallback for the console.
-app.get('/console', (req, res) => res.sendFile('console.html', { root: config.publicDir }));
+site.get('/console', (req, res) => res.sendFile('console.html', { root: config.publicDir }));
+
+app.use(base || '/', site);
 
 const server = http.createServer(app);
 attachHub(server);
@@ -62,8 +98,8 @@ setInterval(() => {
 }, 60_000);
 
 server.listen(config.port, () => {
-  console.log(`\n  KioskFleet server running`);
-  console.log(`  → console : ${config.publicUrl}/console`);
-  console.log(`  → landing : ${config.publicUrl}/`);
-  console.log(`  → api     : ${config.publicUrl}/api\n`);
+  console.log(`\n  KioskFleet server running (${config.env})`);
+  console.log(`  → console : ${config.publicUrl}${base}/console`);
+  console.log(`  → landing : ${config.publicUrl}${base}/`);
+  console.log(`  → api     : ${config.publicUrl}${base}/api\n`);
 });

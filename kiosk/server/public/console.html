@@ -6,7 +6,12 @@
   <title>KioskFleet — מערכת ניהול</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <!-- Document-relative, not root-relative: this page is served both at the
+       root (Railway URL, local dev) and under more30.com/kiosk/. A leading
+       slash would send the browser to more30.com/css/style.css. -->
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- The platform-wide login pill. One file, loaded by every more30 system. -->
+  <script src="https://more30.com/auth-button.js" defer></script>
 </head>
 <body>
   <!-- Login -->
@@ -19,7 +24,7 @@
       <div class="field"><label>שם משתמש</label><input id="login-user" autocomplete="username" required /></div>
       <div class="field"><label>סיסמה</label><input id="login-pass" type="password" autocomplete="current-password" required /></div>
       <button class="btn btn-primary" style="width:100%" type="submit">כניסה</button>
-      <p class="hint" style="margin-top:18px"><a href="/">← חזרה לאתר</a></p>
+      <p class="hint" style="margin-top:18px"><a href="./">← חזרה לאתר</a></p>
     </form>
   </div>
 
@@ -50,6 +55,6 @@
   <div id="modal-root"></div>
   <div id="toast-root"></div>
 
-  <script src="/js/app.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

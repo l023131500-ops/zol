@@ -2,6 +2,7 @@ import { WebSocketServer } from 'ws';
 import { verifyToken } from './auth.js';
 import { db, logEvent } from './db.js';
 import { config } from './config.js';
+import { wsRoute, isWsRoute } from './wspath.js';
 
 /**
  * Realtime hub.
@@ -52,9 +53,10 @@ export function attachHub(server) {
 
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url, config.publicUrl);
-    if (url.pathname === '/ws/agent' || url.pathname === '/ws/console') {
+    const route = wsRoute(url.pathname, config.basePath);
+    if (isWsRoute(route)) {
       wss.handleUpgrade(req, socket, head, (ws) => {
-        wss.emit('connection', ws, req, url);
+        wss.emit('connection', ws, req, new URL(route + url.search, config.publicUrl));
       });
     } else {
       socket.destroy();

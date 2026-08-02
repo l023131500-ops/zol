@@ -9,8 +9,13 @@ let ME = null;
 let SOCK = null;
 let DEVICES = [];
 
+// The server can be mounted under a prefix (more30.com/kiosk) or at the root
+// (the Railway URL, local dev). Derive it from where this page actually is
+// instead of baking it in, so one build serves both.
+const BASE = location.pathname.replace(/\/console\/?$/, '').replace(/\/$/, '');
+
 async function api(path, opts = {}) {
-  const res = await fetch('/api' + path, {
+  const res = await fetch(BASE + '/api' + path, {
     ...opts,
     headers: { 'Content-Type': 'application/json', ...(TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {}), ...(opts.headers || {}) },
   });
@@ -50,6 +55,7 @@ $('#login-form').addEventListener('submit', async (e) => {
 $('#logout-btn').addEventListener('click', async () => {
   try { await api('/auth/logout', { method: 'POST' }); } catch {}
   TOKEN = ''; localStorage.removeItem('kf_token');
+  stopPolling();
   if (SOCK) SOCK.close();
   location.reload();
 });
@@ -74,10 +80,36 @@ async function boot() {
 }
 
 // ── realtime ────────────────────────────────────────────────────
+//
+// The socket is the fast path, not the only path. When the console is reached
+// through more30.com/kiosk the request goes via a path proxy, and a proxy that
+// forwards HTTP does not necessarily forward the WebSocket upgrade — the
+// handshake just fails. A dashboard that silently stops updating is worse than
+// a slower one, so a failed socket falls back to polling instead of retrying
+// into an empty screen.
+let POLL = null;
+let SOCK_EVER_OPEN = false;
+
+function startPolling() {
+  if (POLL) return;
+  POLL = setInterval(() => {
+    if (!TOKEN) return stopPolling();
+    if (CURRENT === 'devices') loadDevices().catch(() => {});
+  }, 15000);
+}
+function stopPolling() { if (POLL) { clearInterval(POLL); POLL = null; } }
+
 function connectSocket() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  SOCK = new WebSocket(`${proto}://${location.host}/ws/console?token=${encodeURIComponent(TOKEN)}`);
-  SOCK.onmessage = (ev) => {
+  let sock;
+  try {
+    sock = new WebSocket(`${proto}://${location.host}${BASE}/ws/console?token=${encodeURIComponent(TOKEN)}`);
+  } catch {
+    return startPolling();
+  }
+  SOCK = sock;
+  sock.onopen = () => { SOCK_EVER_OPEN = true; stopPolling(); };
+  sock.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.type === 'device_update' && m.device) {
       const i = DEVICES.findIndex((d) => d.id === m.device.id);
@@ -86,7 +118,14 @@ function connectSocket() {
       if (CURRENT === 'devices') renderDevices();
     }
   };
-  SOCK.onclose = () => { setTimeout(() => { if (TOKEN) connectSocket(); }, 3000); };
+  sock.onclose = () => {
+    if (!TOKEN) return stopPolling();
+    // Never opened → this route cannot carry a socket at all. Keep polling and
+    // retry rarely; reconnecting every 3s against a proxy that will never
+    // upgrade is just noise in the console and in the server log.
+    startPolling();
+    setTimeout(() => { if (TOKEN) connectSocket(); }, SOCK_EVER_OPEN ? 3000 : 60000);
+  };
 }
 function mapDevice(d) {
   return { id: d.id, name: d.name, serial: d.serial, ownerName: d.owner_name || d.ownerName,
@@ -382,7 +421,7 @@ function viewGuide() {
       <li>הגדרות → מערכת → עדכוני מערכת → <b>כבו עדכונים אוטומטיים</b>.</li>
       <li>הגדרות → אפליקציות → KioskFleet → סוללה → <b>ללא הגבלה</b> (כדי שירוץ ברקע תמיד).</li>
     </ul>
-    <p><a href="/docs/user-guide-he.md" target="_blank">📄 מדריך המשתמש המלא (כולל הגדרת Device Owner)</a></p>
+    <p><a href="${BASE}/docs/user-guide-he.md" target="_blank">📄 מדריך המשתמש המלא (כולל הגדרת Device Owner)</a></p>
   </div>`;
 }
 

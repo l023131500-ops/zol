@@ -8,7 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <!-- Document-relative, not root-relative: this page is served both at the
+       root (Railway URL, local dev) and under more30.com/kiosk/. A leading
+       slash would send the browser to more30.com/css/style.css. -->
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- The platform-wide login pill. One file, loaded by every more30 system. -->
+  <script src="https://more30.com/auth-button.js" defer></script>
 </head>
 <body>
   <header class="nav">
@@ -18,7 +23,7 @@
         <a href="#features">יכולות</a>
         <a href="#how">איך זה עובד</a>
         <a href="#pricing">מחירים</a>
-        <a href="/console" class="btn btn-ghost btn-sm">כניסת לקוחות</a>
+        <a href="console" class="btn btn-ghost btn-sm">כניסת לקוחות</a>
       </nav>
     </div>
   </header>
@@ -28,7 +33,7 @@
       <h1>הפכו כל טאבלט אנדרואיד<br/>לעמדת קיוסק מנוהלת</h1>
       <p class="lead">נועלים את המכשיר על האתר שלכם, שולטים בכל מכשיר מרחוק לפי מספר סידורי, ומקבלים מערכת ניהול עוצמתית — הכל מדפדפן אחד.</p>
       <div class="hero-cta">
-        <a href="/console" class="btn btn-primary">כניסה למערכת הניהול</a>
+        <a href="console" class="btn btn-primary">כניסה למערכת הניהול</a>
         <a href="#how" class="btn btn-ghost">איך מתחילים?</a>
       </div>
       <div class="hero-badges">
@@ -73,9 +78,9 @@
       <h2>תוכניות פשוטות</h2>
       <p class="sub">משלמים לפי מספר המכשירים בצי. מנהל-העל קובע את המכסה לכל לקוח.</p>
       <div class="pricing">
-        <div class="plan"><h3>Starter</h3><div class="price">₪49<small>/חודש</small></div><ul><li>עד 3 מכשירים</li><li>שליטה מרחוק מלאה</li><li>הפעלה אוטומטית</li><li>תמיכה במייל</li></ul><a href="/console" class="btn btn-light">התחלה</a></div>
-        <div class="plan featured"><h3>Business</h3><div class="price">₪149<small>/חודש</small></div><ul><li>עד 15 מכשירים</li><li>ניטור בזמן אמת</li><li>היסטוריית אירועים</li><li>תמיכה מועדפת</li></ul><a href="/console" class="btn btn-primary">הנפוץ ביותר</a></div>
-        <div class="plan"><h3>Enterprise</h3><div class="price">מותאם</div><ul><li>מכשירים ללא הגבלה</li><li>מנהל-על ייעודי</li><li>Device Owner מנוהל</li><li>SLA ותמיכה טלפונית</li></ul><a href="/console" class="btn btn-light">דברו איתנו</a></div>
+        <div class="plan"><h3>Starter</h3><div class="price">₪49<small>/חודש</small></div><ul><li>עד 3 מכשירים</li><li>שליטה מרחוק מלאה</li><li>הפעלה אוטומטית</li><li>תמיכה במייל</li></ul><a href="console" class="btn btn-light">התחלה</a></div>
+        <div class="plan featured"><h3>Business</h3><div class="price">₪149<small>/חודש</small></div><ul><li>עד 15 מכשירים</li><li>ניטור בזמן אמת</li><li>היסטוריית אירועים</li><li>תמיכה מועדפת</li></ul><a href="console" class="btn btn-primary">הנפוץ ביותר</a></div>
+        <div class="plan"><h3>Enterprise</h3><div class="price">מותאם</div><ul><li>מכשירים ללא הגבלה</li><li>מנהל-על ייעודי</li><li>Device Owner מנוהל</li><li>SLA ותמיכה טלפונית</li></ul><a href="console" class="btn btn-light">דברו איתנו</a></div>
       </div>
     </div>
   </section>
@@ -85,7 +90,7 @@
       <div class="cta-band">
         <h2>מוכנים לנעול את המכשיר הראשון?</h2>
         <p style="font-size:18px;opacity:.92;">היכנסו למערכת הניהול והנפיקו קוד רישום תוך שנייה.</p>
-        <a href="/console" class="btn btn-ghost" style="border-color:#fff;">כניסה למערכת ←</a>
+        <a href="console" class="btn btn-ghost" style="border-color:#fff;">כניסה למערכת ←</a>
       </div>
     </div>
   </section>
