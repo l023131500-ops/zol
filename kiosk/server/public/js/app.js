@@ -35,6 +35,106 @@ function toast(msg, ok = true) {
   setTimeout(() => t.remove(), 2600);
 }
 
+// ── allowed-domain list editor ──────────────────────────────────
+//
+// The allow-list is the product: it is the line between a locked device and
+// the open internet. It used to be one text input holding comma-separated
+// hosts, which put the burden of getting the format right on whoever was
+// standing at a venue with a tablet — and a malformed entry does not fail
+// loudly, it just silently matches nothing.
+//
+// Same storage (comma-separated, unchanged on the wire and in the database),
+// different surface: one row per domain, added and removed individually.
+
+/** Mirror of normalizeHostInput on the server, so the UI rejects the same things. */
+function normalizeHost(raw) {
+  let s = String(raw ?? '').trim().toLowerCase();
+  if (!s) return '';
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/^[^/@]*@/, '');
+  s = s.split('/')[0].split('?')[0].split('#')[0].replace(/:\d+$/, '');
+  s = s.replace(/^\.+|\.+$/g, '').replace(/^\*\./, '');
+  if (!/^[a-z0-9.-]+$/.test(s) || !s.includes('.') || s.includes('..')) return '';
+  return s;
+}
+
+/**
+ * Renders into `mountEl` and returns { value() } giving the comma-separated list.
+ * `locked` is the device's own home-URL host: it is shown but cannot be removed,
+ * because removing it would lock the device out of the page it exists to display.
+ */
+function hostListEditor(mountEl, initialCsv, locked) {
+  const lockedHost = normalizeHost(locked || '');
+  let hosts = String(initialCsv || '').split(',').map(normalizeHost).filter(Boolean)
+    .filter((h, i, a) => a.indexOf(h) === i);
+  if (lockedHost && !hosts.includes(lockedHost)) hosts.unshift(lockedHost);
+
+  mountEl.innerHTML = `
+    <div class="hostlist" role="group" aria-label="דומיינים מותרים"></div>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <input class="hl-new" placeholder="example.com" dir="ltr" style="flex:1" aria-label="דומיין חדש" />
+      <button type="button" class="btn btn-light btn-sm hl-add">הוספה</button>
+    </div>
+    <p class="hl-err" style="color:#b91c1c;font-size:12px;margin:6px 0 0;display:none"></p>
+    <p style="color:var(--muted);font-size:12px;margin:6px 0 0">
+      תת-דומיינים נכללים אוטומטית — <code dir="ltr">example.com</code> מתיר גם
+      <code dir="ltr">pay.example.com</code>. הוסיפו כאן גם את שער התשלום.
+    </p>`;
+
+  const listEl = $('.hostlist', mountEl);
+  const input = $('.hl-new', mountEl);
+  const err = $('.hl-err', mountEl);
+
+  const fail = (m) => { err.textContent = m; err.style.display = 'block'; };
+  const clearFail = () => { err.style.display = 'none'; };
+
+  function draw() {
+    if (!hosts.length) {
+      // Empty means "no lock configured", which the device treats as allow-all.
+      // Saying so is the difference between a mistake and a decision.
+      listEl.innerHTML = `<p class="hl-empty" style="color:#b45309;font-size:13px;margin:0">
+        אין דומיינים ברשימה — המכשיר יוכל לפתוח <b>כל</b> כתובת. הוסיפו לפחות אחד כדי לנעול.</p>`;
+      return;
+    }
+    listEl.innerHTML = '';
+    hosts.forEach((h, i) => {
+      const isLocked = h === lockedHost;
+      const row = el(`<div class="hl-row">
+        <span class="hl-host" dir="ltr">${esc(h)}</span>
+        ${isLocked ? '<span class="hl-tag">כתובת המכשיר</span>' : ''}
+        <span style="flex:1"></span>
+        ${isLocked ? '' : `<button type="button" class="btn btn-light btn-sm" data-edit="${i}">עריכה</button>
+        <button type="button" class="btn btn-danger btn-sm" data-del="${i}" aria-label="הסרת ${esc(h)}">הסרה</button>`}
+      </div>`);
+      listEl.appendChild(row);
+    });
+    listEl.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => {
+      hosts.splice(Number(b.dataset.del), 1); clearFail(); draw();
+    });
+    listEl.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => {
+      const i = Number(b.dataset.edit);
+      input.value = hosts[i]; hosts.splice(i, 1); clearFail(); draw(); input.focus();
+    });
+  }
+
+  function add() {
+    const h = normalizeHost(input.value);
+    if (!h) return fail('דומיין לא תקין. הזינו כתובת כמו example.com (בלי https:// ובלי נתיב).');
+    if (hosts.includes(h)) return fail(`${h} כבר ברשימה.`);
+    hosts.push(h); input.value = ''; clearFail(); draw();
+  }
+  $('.hl-add', mountEl).onclick = add;
+  // Enter adds a domain; it must not submit the surrounding dialog.
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+
+  draw();
+  return {
+    value: () => hosts.join(','),
+    // A domain typed but not yet added is almost certainly meant to be in the
+    // list — losing it silently on save is the bug people would blame on us.
+    pending: () => input.value.trim(),
+  };
+}
+
 function modal(html) {
   const bg = el(`<div class="modal-bg"><div class="modal">${html}</div></div>`);
   bg.addEventListener('click', (e) => { if (e.target === bg) bg.remove(); });
@@ -245,11 +345,19 @@ async function editDevice(d) {
     <div class="field"><label>שם ידידותי</label><input id="n" value="${esc(d.name)}" /></div>
     ${linkOpts}
     <div class="field"><label>קישור האירוע/אולם (Home URL)</label><input id="h" value="${esc(d.homeUrl || '')}" dir="ltr" /></div>
-    <div class="field"><label>דומיינים מותרים (מופרדים בפסיק — כולל שער תשלום)</label><input id="a" value="${esc(d.allowedHost || '')}" dir="ltr" /></div>
+    <div class="field"><label>דומיינים מותרים לפתיחה במכשיר</label><div id="hl"></div></div>
     <div class="field"><label>חזרה אוטומטית לקישור לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="idle" type="number" min="0" value="${d.idleReturnSeconds || 0}" dir="ltr" /></div>
     <div class="row"><button class="btn btn-primary" id="s">שמירה</button><button class="btn btn-light" id="c">ביטול</button></div>`);
+
+  let homeHost = '';
+  try { homeHost = new URL(d.homeUrl).host; } catch { /* no home URL yet */ }
+  const hl = hostListEditor($('#hl', m), d.allowedHost, homeHost);
+
   $('#s', m).onclick = async () => {
-    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: $('#a', m).value, idleReturnSeconds: Number($('#idle', m).value) };
+    // Adopt a domain that was typed but not added, rather than dropping it.
+    const stray = hl.pending();
+    if (stray && !confirm(`"${stray}" הוקלד אך לא נוסף לרשימה. לשמור בלעדיו?`)) return;
+    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value) };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }
@@ -319,15 +427,16 @@ async function viewLinks() {
       <p style="color:var(--muted)">שמרו כאן את הקישורים הספציפיים של האירועים/אולמות. בעת הוספת מכשיר תבחרו מתוך הרשימה איזה קישור ינעל אותו.</p>
       <div class="field"><label>שם הקישור</label><input id="l-name" placeholder="למשל: אולם הדר — חתונה 12/8" /></div>
       <div class="field"><label>כתובת הקישור (הדף הספציפי של האירוע)</label><input id="l-url" placeholder="https://example.com/event/123" dir="ltr" /></div>
-      <div class="field"><label>דומיינים נוספים מותרים — למשל שער התשלום (מופרדים בפסיק, לא חובה)</label><input id="l-hosts" placeholder="pay.example.com, secure.cardcom.co.il" dir="ltr" /></div>
+      <div class="field"><label>דומיינים נוספים מותרים — למשל שער התשלום</label><div id="l-hl"></div></div>
       <button class="btn btn-primary" id="l-create">שמור קישור</button>
     </div>
     <div class="card" style="max-width:680px"><h3>הקישורים שלי</h3><div id="l-list">טוען…</div></div>`;
+  const linkHl = hostListEditor($('#l-hl'), '', '');
   $('#l-create').onclick = async () => {
-    const name = $('#l-name').value.trim(), url = $('#l-url').value.trim(), allowedHost = $('#l-hosts').value.trim();
+    const name = $('#l-name').value.trim(), url = $('#l-url').value.trim(), allowedHost = linkHl.value();
     if (!name || !url) return toast('נא למלא שם וכתובת', false);
     try { await api('/links', { method: 'POST', body: JSON.stringify({ name, url, allowedHost }) });
-      toast('הקישור נשמר'); $('#l-name').value = ''; $('#l-url').value = ''; $('#l-hosts').value = ''; loadLinks(); }
+      toast('הקישור נשמר'); $('#l-name').value = ''; $('#l-url').value = ''; loadLinks(); }
     catch (e) { toast(e.message, false); }
   };
   loadLinks();

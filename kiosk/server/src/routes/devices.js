@@ -4,7 +4,7 @@ import { db, logEvent } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { notifyConsolesOfDevice } from '../hub.js';
-import { hostsForUrl, hostAllowed } from '../hosts.js';
+import { hostsForUrl, hostAllowed, normalizeHostCsv, parseHosts } from '../hosts.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -46,6 +46,20 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
     allowedHost = link.allowed_host;
   } else if (homeUrl && !allowedHost) {
     allowedHost = hostsForUrl(homeUrl, device.allowed_host);
+  }
+
+  // Whatever route the list arrived by, store it clean. The allow-list is what
+  // stands between a locked device and the open internet; an entry like
+  // "https://pay.example.com/checkout" matches no host at all, so a list that
+  // looks configured would in fact be protecting nothing.
+  if (allowedHost != null) {
+    const cleaned = normalizeHostCsv(allowedHost);
+    // Refusing an all-junk list is safer than saving an empty one: an empty
+    // allow-list means "no lock configured" to hostAllowed(), which fails open.
+    if (!cleaned && parseHosts(allowedHost).length > 0) {
+      return res.status(400).json({ error: 'רשימת הדומיינים אינה תקינה — נדרש לפחות דומיין אחד תקף (למשל example.com)' });
+    }
+    allowedHost = cleaned || null;
   }
 
   db.prepare(`UPDATE devices SET name = COALESCE(?, name), home_url = COALESCE(?, home_url),

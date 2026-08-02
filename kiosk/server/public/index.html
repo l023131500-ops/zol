@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KioskFleet — ניהול ושליטה מרחוק על מכשירי קיוסק</title>
-  <meta name="description" content="פלטפורמה לניהול צי מכשירי קיוסק (Android). נעילת אתר על טאבלט, שליטה מרחוק לפי מספר סידורי, הפעלה אוטומטית ואבטחה מלאה." />
+  <title>KioskFleet — נעילת מכשיר לקישורים מאושרים בלבד</title>
+  <meta name="description" content="נועלים מכשיר אנדרואיד על רשימת כתובות מאושרות בלבד. המכשיר פותח רק את מה שאישרתם — גם כשאין רשת — ואתם שולטים בו מרחוק ממסך אחד." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -20,8 +20,9 @@
     <div class="container">
       <div class="brand"><span class="logo">◈</span> KioskFleet</div>
       <nav class="nav-links">
+        <a href="#what">מה זה עושה</a>
         <a href="#features">יכולות</a>
-        <a href="#how">איך זה עובד</a>
+        <a href="#how">איך מתחילים</a>
         <a href="#pricing">מחירים</a>
         <a href="console" class="btn btn-ghost btn-sm">כניסת לקוחות</a>
       </nav>
@@ -30,56 +31,86 @@
 
   <section class="hero">
     <div class="container">
-      <h1>הפכו כל טאבלט אנדרואיד<br/>לעמדת קיוסק מנוהלת</h1>
-      <p class="lead">נועלים את המכשיר על האתר שלכם, שולטים בכל מכשיר מרחוק לפי מספר סידורי, ומקבלים מערכת ניהול עוצמתית — הכל מדפדפן אחד.</p>
+      <h1>מכשיר שפותח<br/>רק מה שאישרתם</h1>
+      <p class="lead">
+        אתם קובעים רשימת כתובות מותרות — אחת או כמה. המכשיר נעול עליהן בלבד:
+        אין דפדפן חופשי, אין יציאה למסך הבית, אין הפתעות. וכשאין רשת, הנעילה
+        ממשיכה להחזיק בדיוק אותו דבר.
+      </p>
       <div class="hero-cta">
         <a href="console" class="btn btn-primary">כניסה למערכת הניהול</a>
         <a href="#how" class="btn btn-ghost">איך מתחילים?</a>
       </div>
       <div class="hero-badges">
-        <div><b>∞</b> מכשירים בצי אחד</div>
-        <div><b>&lt;1s</b> תגובה לפקודה מרחוק</div>
-        <div><b>24/7</b> הפעלה אוטומטית</div>
-        <div><b>100%</b> נעילת מסך</div>
+        <div><b>רשימה</b> כתובות מאושרות</div>
+        <div><b>גם בלי רשת</b> הנעילה מחזיקה</div>
+        <div><b>מרחוק</b> שינוי בזמן אמת</div>
+        <div><b>לפי מכשיר</b> הגדרה נפרדת לכל אחד</div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="features">
+  <!-- The product in one screen. Someone who lands here is deciding whether
+       this is the category of thing they were looking for. -->
+  <section class="section" id="what">
+    <div class="container">
+      <h2>מה זה בעצם עושה</h2>
+      <p class="sub">מכשיר אחד, רשימה אחת של כתובות מותרות, ושליטה עליה מרחוק.</p>
+      <div class="grid grid-3">
+        <div class="feature">
+          <div class="ico">📝</div><h3>אתם מגדירים את הרשימה</h3>
+          <p>מוסיפים כתובות מותרות אחת-אחת במסך הניהול — האתר הראשי, שער התשלום,
+             כל מה שצריך. אפשר לערוך ולהסיר בכל רגע. תת-דומיינים נכללים מאליהם.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">🔒</div><h3>המכשיר נועל את עצמו על הרשימה</h3>
+          <p>כתובת שאינה ברשימה פשוט לא נפתחת. כפתורי Home / Back / Recents
+             חסומים, והיציאה ממצב קיוסק דורשת קוד ניהול.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">📴</div><h3>גם כשאין רשת</h3>
+          <p>הנעילה נאכפת על המכשיר עצמו ולא בשרת, ולכן ניתוק אינטרנט לא פותח
+             אותו. פקודות שנשלחו בינתיים ממתינות ומתבצעות ברגע שהוא חוזר.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features" style="background:#fff;">
     <div class="container">
       <h2>שליטה מלאה. מכל מקום.</h2>
-      <p class="sub">כל מה שצריך כדי לתפעל צי מכשירי קיוסק בשטח — בלי לגעת פיזית במכשיר.</p>
+      <p class="sub">כל מה שצריך כדי לתפעל מכשיר בשטח — בלי לגעת בו פיזית.</p>
       <div class="grid grid-3">
-        <div class="feature"><div class="ico">🔒</div><h3>נעילת אתר מוחלטת</h3><p>המכשיר מציג אך ורק את האתר שהגדרתם. חסימת Home / Back / Recents, ללא אפשרות יציאה ללא שם משתמש וסיסמה.</p></div>
-        <div class="feature"><div class="ico">📡</div><h3>שליטה מרחוק לפי מספר סידורי</h3><p>אתחול, רענון, החלפת כתובת, כיבוי/הדלקת מסך וניקוי מטמון — לכל מכשיר בנפרד, בזמן אמת.</p></div>
-        <div class="feature"><div class="ico">⚡</div><h3>הפעלה אוטומטית</h3><p>המכשיר עולה אוטומטית עם ההדלקה, חוזר לאתר לאחר קריסה, והמסך נשאר דלוק תמיד.</p></div>
-        <div class="feature"><div class="ico">👥</div><h3>ניהול רב-משתמשים</h3><p>כל לקוח מקבל שם משתמש, סיסמה ומכסת מכשירים. מנהל-על שולט בכל החשבונות והצי כולו.</p></div>
-        <div class="feature"><div class="ico">🩺</div><h3>ניטור בריאות בזמן אמת</h3><p>סטטוס אונליין/אופליין, סוללה, גרסה, כתובת IP ודגם — לכל מכשיר, עם היסטוריית אירועים.</p></div>
-        <div class="feature"><div class="ico">🛡️</div><h3>אבטחה ברמה גבוהה</h3><p>סיסמאות מוצפנות (bcrypt), טוקן ייחודי לכל מכשיר, הגבלת קצב התחברות ומצב Device Owner.</p></div>
+        <div class="feature"><div class="ico">🌐</div><h3>ספריית קישורים</h3><p>שומרים את הכתובות שחוזרות — אולם, אירוע, טופס — עם הדומיינים המותרים שלהן, ומצמידים אותן למכשיר בלחיצה.</p></div>
+        <div class="feature"><div class="ico">📡</div><h3>פקודות מרחוק לפי מספר סידורי</h3><p>אתחול, רענון, החלפת כתובת, כיבוי והדלקת מסך וניקוי מטמון — לכל מכשיר בנפרד, בזמן אמת.</p></div>
+        <div class="feature"><div class="ico">↩️</div><h3>חזרה אוטומטית</h3><p>אחרי זמן חוסר פעילות שאתם קובעים, המכשיר חוזר לבד לכתובת הראשית — כדי שהמבקר הבא יתחיל מהתחלה.</p></div>
+        <div class="feature"><div class="ico">⚡</div><h3>הפעלה אוטומטית</h3><p>המכשיר עולה עם ההדלקה, חוזר לאתר אחרי קריסה, והמסך נשאר דלוק.</p></div>
+        <div class="feature"><div class="ico">🩺</div><h3>ניטור בזמן אמת</h3><p>מחובר או מנותק, סוללה, דגם, גרסה וכתובת IP — עם היסטוריית אירועים לכל מכשיר.</p></div>
+        <div class="feature"><div class="ico">👥</div><h3>ניהול רב-משתמשים</h3><p>כל לקוח עם חשבון ומכסת מכשירים משלו. מנהל-על רואה ושולט בצי כולו.</p></div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="how" style="background:#fff;">
+  <section class="section" id="how">
     <div class="container">
       <h2>מתחילים ב-4 צעדים</h2>
-      <p class="sub">מהרישום ועד מכשיר נעול ומנוהל בשטח — תוך דקות.</p>
+      <p class="sub">מהכניסה ועד מכשיר נעול בשטח — תוך דקות.</p>
       <div class="steps">
-        <div class="step"><div class="n"></div><div><h4>נכנסים למערכת</h4><p>מקבלים שם משתמש וסיסמה ומכסת מכשירים, ומתחברים למסך הניהול.</p></div></div>
-        <div class="step"><div class="n"></div><div><h4>יוצרים קוד רישום</h4><p>בוחרים את כתובת האתר שהמכשיר יציג ומקבלים קוד רישום בן 6 תווים.</p></div></div>
-        <div class="step"><div class="n"></div><div><h4>מתקינים את האפליקציה</h4><p>מתקינים את אפליקציית KioskFleet Agent על הטאבלט ומזינים את קוד הרישום.</p></div></div>
-        <div class="step"><div class="n"></div><div><h4>שולטים מרחוק</h4><p>המכשיר מופיע בדשבורד — משם אפשר לאתחל, להחליף אתר, לרענן ולנטר, מכל מקום.</p></div></div>
+        <div class="step"><div class="n"></div><div><h4>נכנסים למערכת</h4><p>מתחברים למסך הניהול עם החשבון שלכם.</p></div></div>
+        <div class="step"><div class="n"></div><div><h4>מגדירים את הרשימה</h4><p>בוחרים את הכתובת הראשית ומוסיפים את שאר הכתובות המותרות — למשל שער תשלום.</p></div></div>
+        <div class="step"><div class="n"></div><div><h4>מתקינים ומזינים קוד</h4><p>מתקינים את אפליקציית KioskFleet Agent על המכשיר ומקלידים את קוד הרישום בן שש הספרות.</p></div></div>
+        <div class="step"><div class="n"></div><div><h4>שולטים מרחוק</h4><p>המכשיר מופיע בדשבורד. משם משנים את הרשימה, מחליפים כתובת ומאתחלים — מכל מקום.</p></div></div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="pricing">
+  <section class="section" id="pricing" style="background:#fff;">
     <div class="container">
       <h2>תוכניות פשוטות</h2>
-      <p class="sub">משלמים לפי מספר המכשירים בצי. מנהל-העל קובע את המכסה לכל לקוח.</p>
+      <p class="sub">משלמים לפי מספר המכשירים. מנהל-העל קובע את המכסה לכל לקוח.</p>
       <div class="pricing">
-        <div class="plan"><h3>Starter</h3><div class="price">₪49<small>/חודש</small></div><ul><li>עד 3 מכשירים</li><li>שליטה מרחוק מלאה</li><li>הפעלה אוטומטית</li><li>תמיכה במייל</li></ul><a href="console" class="btn btn-light">התחלה</a></div>
-        <div class="plan featured"><h3>Business</h3><div class="price">₪149<small>/חודש</small></div><ul><li>עד 15 מכשירים</li><li>ניטור בזמן אמת</li><li>היסטוריית אירועים</li><li>תמיכה מועדפת</li></ul><a href="console" class="btn btn-primary">הנפוץ ביותר</a></div>
+        <div class="plan"><h3>Starter</h3><div class="price">₪49<small>/חודש</small></div><ul><li>עד 3 מכשירים</li><li>רשימת כתובות מלאה</li><li>שליטה מרחוק</li><li>תמיכה במייל</li></ul><a href="console" class="btn btn-light">התחלה</a></div>
+        <div class="plan featured"><h3>Business</h3><div class="price">₪149<small>/חודש</small></div><ul><li>עד 15 מכשירים</li><li>ספריית קישורים</li><li>ניטור והיסטוריה</li><li>תמיכה מועדפת</li></ul><a href="console" class="btn btn-primary">הנפוץ ביותר</a></div>
         <div class="plan"><h3>Enterprise</h3><div class="price">מותאם</div><ul><li>מכשירים ללא הגבלה</li><li>מנהל-על ייעודי</li><li>Device Owner מנוהל</li><li>SLA ותמיכה טלפונית</li></ul><a href="console" class="btn btn-light">דברו איתנו</a></div>
       </div>
     </div>
@@ -89,7 +120,7 @@
     <div class="container">
       <div class="cta-band">
         <h2>מוכנים לנעול את המכשיר הראשון?</h2>
-        <p style="font-size:18px;opacity:.92;">היכנסו למערכת הניהול והנפיקו קוד רישום תוך שנייה.</p>
+        <p style="font-size:18px;opacity:.92;">היכנסו למערכת הניהול, הגדירו את רשימת הכתובות והנפיקו קוד רישום.</p>
         <a href="console" class="btn btn-ghost" style="border-color:#fff;">כניסה למערכת ←</a>
       </div>
     </div>
@@ -98,7 +129,9 @@
   <footer class="footer">
     <div class="container">
       <div class="brand" style="justify-content:center;margin-bottom:10px;"><span class="logo">◈</span> KioskFleet</div>
-      <p>ניהול ושליטה מרחוק על מכשירי קיוסק · &copy; 2026</p>
+      <!-- Says Android because that is the agent that exists. Naming platforms
+           we do not ship an agent for would be a promise the product cannot keep. -->
+      <p>נעילת מכשירי אנדרואיד לכתובות מאושרות · חלק מ-<a href="https://more30.com" style="color:inherit;text-decoration:underline">more30.com</a> · &copy; 2026</p>
     </div>
   </footer>
 </body>
