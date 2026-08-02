@@ -26,6 +26,9 @@ importers:
       '@kesef/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@kesef/metrics':
+        specifier: workspace:*
+        version: link:../../packages/metrics
       '@kesef/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -115,6 +118,9 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
 
   packages/normalize:
     devDependencies:

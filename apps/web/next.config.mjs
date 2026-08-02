@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   // Workspace packages ship raw TS/JSX and must be transpiled by Next.
-  transpilePackages: ['@kesef/ui', '@kesef/db'],
+  transpilePackages: ['@kesef/ui', '@kesef/db', '@kesef/metrics'],
   experimental: {
     optimizePackageImports: ['@kesef/ui'],
   },
