@@ -12,6 +12,8 @@ const TABS = [
   { seg: 'gap', label: 'מה נתקע' },
   { seg: 'grant-calls', label: 'קולות קוראים' },
   { seg: 'briefing', label: 'תיק לפגישה' },
+  { seg: 'council', label: 'מועצה' },
+  { seg: 'officials', label: 'בעלי תפקידים' },
   { seg: 'demographics', label: 'אוכלוסייה' },
   { seg: 'calculators', label: 'מחשבונים' },
 ];
