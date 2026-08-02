@@ -129,9 +129,25 @@ function hostListEditor(mountEl, initialCsv, locked) {
   draw();
   return {
     value: () => hosts.join(','),
-    // A domain typed but not yet added is almost certainly meant to be in the
-    // list — losing it silently on save is the bug people would blame on us.
-    pending: () => input.value.trim(),
+    /**
+     * Take in anything typed but not yet added, and report whether the list is
+     * safe to save.
+     *
+     * A domain sitting in the input is meant to be in the list — the person
+     * typed it. Dropping it silently loses a domain the device then cannot
+     * open; asking about it with confirm() is worse still, because a dismissed
+     * dialog cancels the entire save and nothing at all is written. So: adopt
+     * it if it is valid, and refuse to save with an inline error if it is not.
+     */
+    commitPending() {
+      const raw = input.value.trim();
+      if (!raw) return true;
+      const h = normalizeHost(raw);
+      if (!h) { fail('דומיין לא תקין. הזינו כתובת כמו example.com, או נקו את השדה כדי לשמור בלעדיו.'); return false; }
+      if (!hosts.includes(h)) hosts.push(h);
+      input.value = ''; clearFail(); draw();
+      return true;
+    },
   };
 }
 
@@ -355,8 +371,7 @@ async function editDevice(d) {
 
   $('#s', m).onclick = async () => {
     // Adopt a domain that was typed but not added, rather than dropping it.
-    const stray = hl.pending();
-    if (stray && !confirm(`"${stray}" הוקלד אך לא נוסף לרשימה. לשמור בלעדיו?`)) return;
+    if (!hl.commitPending()) return;
     const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value) };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
