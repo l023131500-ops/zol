@@ -118,6 +118,7 @@ class EnrollActivity : AppCompatActivity() {
             val dev = json.getJSONObject("device")
             Prefs.set(this, Prefs.HOME_URL, dev.optString("homeUrl"))
             Prefs.set(this, Prefs.ALLOWED_HOST, dev.optString("allowedHost"))
+            Prefs.set(this, Prefs.IDLE_RETURN, dev.optInt("idleReturnSeconds", 0).toString())
             Prefs.set(this, Prefs.DEVICE_NAME, dev.optString("name"))
             Prefs.set(this, Prefs.LAST_URL, dev.optString("homeUrl"))
             null

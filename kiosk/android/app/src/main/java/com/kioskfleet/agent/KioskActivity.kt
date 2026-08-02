@@ -35,10 +35,34 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private var overlay: TextView? = null
     private var cornerTapCount = 0
     private var isAdminUnlocked = false
-    private var allowedHost = ""
+    private var allowedHosts = ""       // comma-separated
+    private var idleReturnSeconds = 0
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tapResetRunnable: Runnable? = null
     private var relockRunnable: Runnable? = null
+    private val idleRunnable = Runnable { returnToVenue() }
+
+    /** True if a host is inside the device's allow-list (event domain + payment gateway). */
+    private fun hostAllowed(host: String?): Boolean {
+        if (host.isNullOrEmpty()) return false
+        val h = host.lowercase()
+        val list = allowedHosts.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        if (list.isEmpty()) return true
+        return list.any { h == it || h.endsWith(".$it") }
+    }
+
+    private fun resetIdleTimer() {
+        mainHandler.removeCallbacks(idleRunnable)
+        if (idleReturnSeconds > 0 && !isAdminUnlocked) {
+            mainHandler.postDelayed(idleRunnable, idleReturnSeconds * 1000L)
+        }
+    }
+
+    /** After inactivity, return to the exact event/venue link — never a generic home. */
+    private fun returnToVenue() {
+        val venue = Prefs.get(this, Prefs.HOME_URL)
+        if (venue.isNotEmpty()) webView.loadUrl(venue)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +70,8 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         if (!Prefs.isEnrolled(this)) {
             startActivity(Intent(this, EnrollActivity::class.java)); finish(); return
         }
-        allowedHost = Prefs.get(this, Prefs.ALLOWED_HOST)
+        allowedHosts = Prefs.get(this, Prefs.ALLOWED_HOST)
+        idleReturnSeconds = Prefs.get(this, Prefs.IDLE_RETURN).toIntOrNull() ?: 0
 
         acquireWakeLock(); lockScreenOn(); hideSystemUI()
         setupWebView()
@@ -54,6 +79,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
 
         val start = Prefs.get(this, Prefs.LAST_URL).ifEmpty { Prefs.get(this, Prefs.HOME_URL) }
         webView.loadUrl(start.ifEmpty { "about:blank" })
+        resetIdleTimer()
 
         agent = AgentClient(this, this)
         agent.start()
@@ -62,6 +88,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     override fun onResume() {
         super.onResume()
         if (!::wakeLock.isInitialized || !wakeLock.isHeld) acquireWakeLock()
+        resetIdleTimer()
     }
 
     override fun onDestroy() {
@@ -123,8 +150,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val host = request.url.host ?: return true
-                val allowed = allowedHost.isEmpty() || host == allowedHost || host.endsWith(".$allowedHost")
-                return if (allowed) false else { toast("קישור חסום"); true }
+                return if (hostAllowed(host)) false else { toast("קישור חסום"); true }
             }
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
@@ -155,9 +181,9 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     override fun onReload() { webView.reload() }
     override fun onSetUrl(url: String) {
         val host = android.net.Uri.parse(url).host ?: ""
-        if (allowedHost.isEmpty() || host == allowedHost || host.endsWith(".$allowedHost")) {
-            Prefs.set(this, Prefs.HOME_URL, url); webView.loadUrl(url)
-        } else toast("כתובת חסומה: מחוץ לדומיין המורשה")
+        if (hostAllowed(host)) {
+            Prefs.set(this, Prefs.HOME_URL, url); webView.loadUrl(url); resetIdleTimer()
+        } else toast("כתובת חסומה: מחוץ לדומיינים המורשים")
     }
     override fun onScreenOn() {
         if (!wakeLock.isHeld) acquireWakeLock()
@@ -180,9 +206,11 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         toast("מצב תחזוקה פעיל ל-$minutes דקות")
     }
     override fun onMessage(text: String) { if (text.isBlank()) removeOverlay() else showOverlay(text) }
-    override fun onConfigUpdated(homeUrl: String, host: String) {
-        allowedHost = host
+    override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int) {
+        allowedHosts = host
+        idleReturnSeconds = idleSeconds
         if (homeUrl.isNotEmpty()) webView.loadUrl(homeUrl)
+        resetIdleTimer()
     }
 
     private fun showOverlay(text: String) = runOnUiThread {
@@ -200,8 +228,10 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     // ── Hidden maintenance entry ────────────────────────────────
     private fun setupTouchInterceptor() {
         webView.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN &&
-                event.x <= CORNER_SIZE_PX && event.y <= CORNER_SIZE_PX) handleCornerTap()
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                resetIdleTimer()  // any interaction keeps the customer's session alive
+                if (event.x <= CORNER_SIZE_PX && event.y <= CORNER_SIZE_PX) handleCornerTap()
+            }
             false
         }
     }
@@ -230,5 +260,6 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         hideSystemUI()
         removeOverlay()
         onScreenOn()
+        resetIdleTimer()
     }
 }

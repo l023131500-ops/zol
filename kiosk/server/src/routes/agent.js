@@ -45,16 +45,16 @@ router.post('/enroll', (req, res) => {
 
   if (existing && existing.owner_id === owner.id) {
     // Re-enroll same hardware: rotate its token, keep history.
-    db.prepare('UPDATE devices SET device_token = ?, name = COALESCE(?, name), home_url = ?, allowed_host = ?, last_seen = ? WHERE id = ?')
-      .run(token, enr.name, enr.home_url, enr.allowed_host, now, existing.id);
+    db.prepare('UPDATE devices SET device_token = ?, name = COALESCE(?, name), home_url = ?, allowed_host = ?, idle_return_seconds = ?, last_seen = ? WHERE id = ?')
+      .run(token, enr.name, enr.home_url, enr.allowed_host, enr.idle_return_seconds ?? 0, now, existing.id);
     device = db.prepare('SELECT * FROM devices WHERE id = ?').get(existing.id);
   } else if (existing) {
     return res.status(409).json({ error: 'מכשיר זה כבר רשום לחשבון אחר' });
   } else {
-    const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, model, android_ver, app_version, last_seen)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, idle_return_seconds, model, android_ver, app_version, last_seen)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(owner.id, serial, enr.name || `מכשיר ${serial.slice(-4)}`, token,
-           enr.allowed_host, enr.home_url, req.body.model || null,
+           enr.allowed_host, enr.home_url, enr.idle_return_seconds ?? 0, req.body.model || null,
            req.body.androidVersion || null, req.body.appVersion || null, now);
     device = db.prepare('SELECT * FROM devices WHERE id = ?').get(info.lastInsertRowid);
   }
@@ -68,6 +68,7 @@ router.post('/enroll', (req, res) => {
     device: {
       id: device.id, name: device.name, serial: device.serial,
       homeUrl: device.home_url, allowedHost: device.allowed_host,
+      idleReturnSeconds: device.idle_return_seconds,
     },
   });
 });
@@ -98,7 +99,10 @@ router.post('/heartbeat', (req, res) => {
   });
 
   res.json({
-    config: { homeUrl: fresh.home_url, allowedHost: fresh.allowed_host, name: fresh.name },
+    config: {
+      homeUrl: fresh.home_url, allowedHost: fresh.allowed_host,
+      name: fresh.name, idleReturnSeconds: fresh.idle_return_seconds,
+    },
     commands,
   });
 });

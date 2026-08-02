@@ -91,7 +91,8 @@ function connectSocket() {
 function mapDevice(d) {
   return { id: d.id, name: d.name, serial: d.serial, ownerName: d.owner_name || d.ownerName,
     online: d.online === 1 || d.online === true, status: d.status, homeUrl: d.home_url || d.homeUrl,
-    allowedHost: d.allowed_host || d.allowedHost, lastSeen: d.last_seen || d.lastSeen,
+    allowedHost: d.allowed_host || d.allowedHost, idleReturnSeconds: d.idle_return_seconds ?? d.idleReturnSeconds ?? 0,
+    lastSeen: d.last_seen || d.lastSeen,
     battery: d.battery, model: d.model, appVersion: d.app_version || d.appVersion, ip: d.ip };
 }
 
@@ -104,8 +105,12 @@ $('#menu').addEventListener('click', (e) => {
 function route(view) {
   CURRENT = view;
   [...$('#menu').children].forEach((a) => a.classList.toggle('active', a.dataset.view === view));
-  ({ devices: viewDevices, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
+  ({ devices: viewDevices, links: viewLinks, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
 }
+
+// Cache of the customer's link library (used by enroll + edit selectors).
+let LINKS = [];
+async function loadLinksCache() { try { LINKS = (await api('/links')).links; } catch { LINKS = []; } return LINKS; }
 
 // ── DEVICES ─────────────────────────────────────────────────────
 async function viewDevices() {
@@ -170,14 +175,22 @@ function promptUrl(d) {
   $('#go', m).onclick = () => { const url = $('#u', m).value.trim(); if (url) cmd(d, 'set_url', { url }); m.remove(); };
   $('#c', m).onclick = () => m.remove();
 }
-function editDevice(d) {
+async function editDevice(d) {
+  await loadLinksCache();
+  const linkOpts = LINKS.length
+    ? `<div class="field"><label>החלף קישור נעילה מהספרייה (יעדכן כתובת ודומיינים)</label>
+        <select id="lk"><option value="">— ללא שינוי —</option>${LINKS.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>` : '';
   const m = modal(`<h3>עריכת מכשיר</h3>
     <div class="field"><label>שם ידידותי</label><input id="n" value="${esc(d.name)}" /></div>
-    <div class="field"><label>כתובת בית (Home URL)</label><input id="h" value="${esc(d.homeUrl || '')}" /></div>
-    <div class="field"><label>דומיין מורשה</label><input id="a" value="${esc(d.allowedHost || '')}" /></div>
+    ${linkOpts}
+    <div class="field"><label>קישור האירוע/אולם (Home URL)</label><input id="h" value="${esc(d.homeUrl || '')}" dir="ltr" /></div>
+    <div class="field"><label>דומיינים מותרים (מופרדים בפסיק — כולל שער תשלום)</label><input id="a" value="${esc(d.allowedHost || '')}" dir="ltr" /></div>
+    <div class="field"><label>חזרה אוטומטית לקישור לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="idle" type="number" min="0" value="${d.idleReturnSeconds || 0}" dir="ltr" /></div>
     <div class="row"><button class="btn btn-primary" id="s">שמירה</button><button class="btn btn-light" id="c">ביטול</button></div>`);
   $('#s', m).onclick = async () => {
-    try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify({ name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: $('#a', m).value }) });
+    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: $('#a', m).value, idleReturnSeconds: Number($('#idle', m).value) };
+    const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
+    try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }
     catch (e) { toast(e.message, false); }
   };
@@ -192,12 +205,18 @@ function confirmDelete(d) {
 
 // ── ENROLL ──────────────────────────────────────────────────────
 async function viewEnroll() {
+  await loadLinksCache();
+  const linkOptions = LINKS.length
+    ? `<option value="">— בחרו קישור מהספרייה —</option>` + LINKS.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('')
+    : '';
   $('#content').innerHTML = `<div class="topbar"><h1>הוספת מכשיר</h1></div>
     <div class="card" style="max-width:640px">
       <h3>יצירת קוד רישום</h3>
-      <p style="color:var(--muted)">הזינו את כתובת האתר שהמכשיר יציג. תקבלו קוד בן 6 תווים להזנה באפליקציה במכשיר.</p>
+      <p style="color:var(--muted)">בחרו איזה קישור ינעל את המכשיר — מהספרייה, או הזנה ידנית. תקבלו קוד בן 6 תווים להזנה באפליקציה.</p>
       <div class="field"><label>שם המכשיר (לזיהוי בדשבורד)</label><input id="e-name" placeholder="למשל: כניסה ראשית" /></div>
-      <div class="field"><label>כתובת האתר שיוצג</label><input id="e-url" placeholder="https://example.com" dir="ltr" /></div>
+      ${LINKS.length ? `<div class="field"><label>קישור מהספרייה</label><select id="e-link">${linkOptions}</select></div>` : `<p style="color:var(--muted);font-size:13px">אין עדיין קישורים בספרייה. הוסיפו ב"ספריית קישורים" או הזינו ידנית למטה.</p>`}
+      <div class="field"><label>או כתובת אתר ידנית (הקישור הספציפי של האירוע/אולם)</label><input id="e-url" placeholder="https://example.com/event/123" dir="ltr" /></div>
+      <div class="field"><label>חזרה אוטומטית לקישור האירוע לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="e-idle" type="number" min="0" value="60" dir="ltr" /></div>
       <button class="btn btn-primary" id="e-create">צור קוד רישום</button>
       <div id="e-result"></div>
     </div>
@@ -208,9 +227,12 @@ async function viewEnroll() {
 async function createEnrollment() {
   const homeUrl = $('#e-url').value.trim();
   const name = $('#e-name').value.trim();
-  if (!homeUrl) return toast('נא להזין כתובת אתר', false);
+  const linkId = $('#e-link') ? ($('#e-link').value || null) : null;
+  const idleReturnSeconds = Math.max(0, Number($('#e-idle').value) || 0);
+  if (!linkId && !homeUrl) return toast('בחרו קישור מהספרייה או הזינו כתובת אתר', false);
   try {
-    const { enrollment } = await api('/enrollments', { method: 'POST', body: JSON.stringify({ homeUrl, name }) });
+    const body = linkId ? { linkId: Number(linkId), name, idleReturnSeconds } : { homeUrl, name, idleReturnSeconds };
+    const { enrollment } = await api('/enrollments', { method: 'POST', body: JSON.stringify(body) });
     $('#e-result').innerHTML = `<div class="alert alert-ok" style="margin-top:16px">
       נוצר קוד רישום! הזינו אותו באפליקציה במכשיר:<br/><br/>
       <span class="code-chip">${esc(enrollment.code)}</span></div>`;
@@ -226,6 +248,38 @@ async function loadEnrollments() {
   box.innerHTML = '<table><tr><th>קוד</th><th>אתר</th><th>שם</th><th></th></tr>' +
     open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td><td><button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/enrollments/' + b.dataset.del, { method: 'DELETE' }); loadEnrollments(); });
+}
+
+// ── LINK LIBRARY ────────────────────────────────────────────────
+async function viewLinks() {
+  $('#content').innerHTML = `<div class="topbar"><h1>ספריית קישורים</h1></div>
+    <div class="card" style="max-width:680px">
+      <h3>קישור חדש</h3>
+      <p style="color:var(--muted)">שמרו כאן את הקישורים הספציפיים של האירועים/אולמות. בעת הוספת מכשיר תבחרו מתוך הרשימה איזה קישור ינעל אותו.</p>
+      <div class="field"><label>שם הקישור</label><input id="l-name" placeholder="למשל: אולם הדר — חתונה 12/8" /></div>
+      <div class="field"><label>כתובת הקישור (הדף הספציפי של האירוע)</label><input id="l-url" placeholder="https://example.com/event/123" dir="ltr" /></div>
+      <div class="field"><label>דומיינים נוספים מותרים — למשל שער התשלום (מופרדים בפסיק, לא חובה)</label><input id="l-hosts" placeholder="pay.example.com, secure.cardcom.co.il" dir="ltr" /></div>
+      <button class="btn btn-primary" id="l-create">שמור קישור</button>
+    </div>
+    <div class="card" style="max-width:680px"><h3>הקישורים שלי</h3><div id="l-list">טוען…</div></div>`;
+  $('#l-create').onclick = async () => {
+    const name = $('#l-name').value.trim(), url = $('#l-url').value.trim(), allowedHost = $('#l-hosts').value.trim();
+    if (!name || !url) return toast('נא למלא שם וכתובת', false);
+    try { await api('/links', { method: 'POST', body: JSON.stringify({ name, url, allowedHost }) });
+      toast('הקישור נשמר'); $('#l-name').value = ''; $('#l-url').value = ''; $('#l-hosts').value = ''; loadLinks(); }
+    catch (e) { toast(e.message, false); }
+  };
+  loadLinks();
+}
+async function loadLinks() {
+  const { links } = await api('/links'); LINKS = links;
+  const box = $('#l-list'); if (!box) return;
+  if (!links.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין עדיין קישורים.</p>'; return; }
+  box.innerHTML = '<table><tr><th>שם</th><th>כתובת</th><th>דומיינים מותרים</th><th></th></tr>' +
+    links.map((l) => `<tr><td><b>${esc(l.name)}</b></td><td dir="ltr" style="font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis">${esc(l.url)}</td>
+      <td dir="ltr" style="font-size:12px;color:var(--muted)">${esc(l.allowed_host || '')}</td>
+      <td><button class="btn btn-danger btn-sm" data-del="${l.id}">מחק</button></td></tr>`).join('') + '</table>';
+  box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/links/' + b.dataset.del, { method: 'DELETE' }); loadLinks(); });
 }
 
 // ── SETTINGS ────────────────────────────────────────────────────

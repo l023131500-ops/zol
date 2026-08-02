@@ -10,6 +10,7 @@ import { ensureSeed } from './seed.js';
 import { attachHub } from './hub.js';
 import authRoutes from './routes/auth.js';
 import deviceRoutes from './routes/devices.js';
+import linkRoutes from './routes/links.js';
 import adminRoutes from './routes/admin.js';
 import agentRoutes from './routes/agent.js';
 
@@ -36,6 +37,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISO
 
 app.use('/api/auth', authRoutes);
 app.use('/api', deviceRoutes);
+app.use('/api', linkRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/agent', agentRoutes);
 

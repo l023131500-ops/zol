@@ -9,8 +9,9 @@ object Prefs {
 
     const val SERVER_URL   = "server_url"      // e.g. https://panel.kioskfleet.com
     const val DEVICE_TOKEN = "device_token"    // issued at enrollment
-    const val HOME_URL     = "home_url"        // URL the kiosk shows
-    const val ALLOWED_HOST = "allowed_host"    // host the kiosk is locked to
+    const val HOME_URL     = "home_url"        // the specific event/venue link
+    const val ALLOWED_HOST = "allowed_host"    // comma-separated hosts allowed (event + payment)
+    const val IDLE_RETURN  = "idle_return"     // seconds of inactivity → back to HOME_URL (0 = off)
     const val DEVICE_NAME  = "device_name"
     const val ADMIN_CODE   = "admin_code"      // local maintenance code
     const val LAST_URL     = "last_url"        // resume after crash/reboot

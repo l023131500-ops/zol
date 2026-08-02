@@ -24,7 +24,7 @@ interface CommandHandler {
     fun onLock()
     fun onUnlock(minutes: Int)
     fun onMessage(text: String)
-    fun onConfigUpdated(homeUrl: String, allowedHost: String)
+    fun onConfigUpdated(homeUrl: String, allowedHost: String, idleReturnSeconds: Int)
 }
 
 /**
@@ -124,9 +124,15 @@ class AgentClient(
             val json = JSONObject(conn.inputStream.bufferedReader().readText())
             json.optJSONObject("config")?.let { cfg ->
                 val home = cfg.optString("homeUrl"); val host = cfg.optString("allowedHost")
+                val idle = cfg.optInt("idleReturnSeconds", 0)
                 if (home.isNotEmpty()) {
+                    val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
+                        host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
+                        idle.toString() != Prefs.get(ctx, Prefs.IDLE_RETURN)
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
+                    Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
+                    if (changed) ui.post { handler.onConfigUpdated(home, host, idle) }
                 }
             }
             val cmds = json.optJSONArray("commands") ?: return
@@ -154,9 +160,12 @@ class AgentClient(
                 "update_config" -> {
                     val home = payload.optString("homeUrl", Prefs.get(ctx, Prefs.HOME_URL))
                     val host = payload.optString("allowedHost", Prefs.get(ctx, Prefs.ALLOWED_HOST))
+                    val idle = payload.optInt("idleReturnSeconds",
+                        Prefs.get(ctx, Prefs.IDLE_RETURN).toIntOrNull() ?: 0)
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
-                    ui.post { handler.onConfigUpdated(home, host) }
+                    Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
+                    ui.post { handler.onConfigUpdated(home, host, idle) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }
                 else -> { ok = false; result = "unknown command" }
