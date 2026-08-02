@@ -6,6 +6,7 @@
 export * from './datagov';
 export * from './sync-financial';
 export * from './packages';
+export * from './supabase-writer';
 
 export interface SyncResult {
   sourceSlug: string;

@@ -1,0 +1,53 @@
+name: Data sync
+
+# Scheduled ETL (SPEC part ב §3; Build task 23). Requires egress to the data
+# sources and the Supabase secrets below; runs no-op / fails fast without them.
+on:
+  schedule:
+    - cron: '17 2 * * *' # daily 02:17 UTC — authority sites (most dynamic)
+    - cron: '17 3 * * 1' # weekly Mon — obudget
+    - cron: '17 4 1 * *' # monthly — data.gov.il audited reports, National Insurance
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'source slug to sync (blank = scheduled set)'
+        required: false
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Guard — required secrets present
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Supabase secrets not configured — see docs/PENDING_LIVE_RUN.md"
+            exit 1
+          fi
+
+      - name: Run sync
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          SYNC_SOURCE: ${{ github.event.inputs.source }}
+        run: pnpm --filter @kesef/ingest run sync
