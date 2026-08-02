@@ -87,15 +87,22 @@ export interface AppUser {
   authority_id: string | null;
 }
 
-/** Minimal Database shape consumed by the typed Supabase client. */
+/**
+ * Minimal Database shape consumed by the typed Supabase client.
+ * kesef objects live in the `kesef` schema (see migration 0003), so the app
+ * client is created with { db: { schema: 'kesef' } } and this schema key.
+ */
+export const KESEF_SCHEMA = 'kesef' as const;
+
 export interface Database {
-  public: {
+  kesef: {
     Tables: {
       authority: { Row: Authority };
       chart_of_accounts: { Row: ChartOfAccount };
       fact_financial: { Row: FactFinancial };
       alert: { Row: Alert };
       app_user: { Row: AppUser };
+      data_source: { Row: { slug: string; display_name: string; sync_frequency: string | null; last_ok_at: string | null } };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

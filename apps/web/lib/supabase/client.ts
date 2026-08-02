@@ -10,5 +10,5 @@ export function createClientSupabase() {
   if (!url || !anon) {
     throw new Error('Supabase env is not configured (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY).');
   }
-  return createBrowserClient<Database>(url, anon);
+  return createBrowserClient<Database, 'kesef'>(url, anon, { db: { schema: 'kesef' } });
 }

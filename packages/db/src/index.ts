@@ -13,7 +13,7 @@ export function createBrowserDb(): SupabaseClient<Database> {
   if (!url || !anon) {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY');
   }
-  return createClient<Database>(url, anon);
+  return createClient<Database, 'kesef'>(url, anon, { db: { schema: 'kesef' } });
 }
 
 /**
@@ -26,7 +26,8 @@ export function createServiceDb(): SupabaseClient<Database> {
   if (!url || !key) {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY');
   }
-  return createClient<Database>(url, key, {
+  return createClient<Database, 'kesef'>(url, key, {
+    db: { schema: 'kesef' },
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }

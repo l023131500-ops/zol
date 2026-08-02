@@ -16,7 +16,8 @@ export async function createServerSupabase() {
   if (!url || !anon) return null;
 
   const cookieStore = await cookies();
-  return createServerClient<Database>(url, anon, {
+  return createServerClient<Database, 'kesef'>(url, anon, {
+    db: { schema: 'kesef' },
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (toSet: CookieToSet[]) => {
