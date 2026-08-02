@@ -3,7 +3,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 
-fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
+// Whether the database survived the last restart is the single most important
+// fact about this deployment, and it is invisible from the outside until a
+// customer notices their devices are gone. Without a persistent volume mounted
+// at the directory below, every deploy silently starts from an empty file and
+// re-seeds the admin — which looks exactly like a healthy first boot in the
+// logs. Say it out loud at startup instead.
+const dbDir = path.dirname(config.dbPath);
+const existedAtBoot = fs.existsSync(config.dbPath);
+fs.mkdirSync(dbDir, { recursive: true });
+console.log(
+  `  db: ${config.dbPath} — ${existedAtBoot ? 'existing file (data persisted)' : 'NEW FILE (no data carried over — is a volume mounted at ' + dbDir + '?)'}`,
+);
 
 export const db = new Database(config.dbPath);
 db.pragma('journal_mode = WAL');
