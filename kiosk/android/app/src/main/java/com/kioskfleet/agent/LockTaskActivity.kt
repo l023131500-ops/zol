@@ -19,6 +19,7 @@ class LockTaskActivity : AppCompatActivity() {
         val admin = ComponentName(this, KioskDeviceAdminReceiver::class.java)
         if (dpm.isDeviceOwnerApp(packageName)) {
             dpm.setLockTaskPackages(admin, arrayOf(packageName))
+            KioskPolicy.apply(this)   // block disk-on-key / sideloading; keep card readers working
             startLockTask()
         }
 
