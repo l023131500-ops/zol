@@ -1,0 +1,7 @@
+{
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "no-console": ["error", { "allow": ["warn", "error"] }],
+    "react/no-unescaped-entities": "off"
+  }
+}
