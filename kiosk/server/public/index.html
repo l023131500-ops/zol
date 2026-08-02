@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -7,7 +7,13 @@
   <meta name="description" content="נועלים מכשיר אנדרואיד על רשימת כתובות מאושרות בלבד. המכשיר פותח רק את מה שאישרתם — גם כשאין רשת — ואתם שולטים בו מרחוק ממסך אחד." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Off the paint path: Lighthouse charged 480ms of render-blocking to this
+       request, and NetFree intermittently blocks fonts.googleapis.com entirely —
+       in which case a blocking stylesheet holds the whole page until it fails.
+       The fallback stack is declared in style.css, so the page reads immediately. -->
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
   <!-- Document-relative, not root-relative: this page is served both at the
        root (Railway URL, local dev) and under more30.com/kiosk/. A leading
        slash would send the browser to more30.com/css/style.css. -->
@@ -16,6 +22,9 @@
   <script src="https://more30.com/auth-button.js" defer></script>
 </head>
 <body>
+  <!-- Paired with the <main> landmark below: a screen reader can now offer
+       "skip to main content" instead of walking the nav on every load. -->
+  <a class="skip" href="#main">דילוג לתוכן הראשי</a>
   <header class="nav">
     <div class="container">
       <div class="brand"><span class="logo">◈</span> KioskFleet</div>
@@ -29,6 +38,8 @@
     </div>
   </header>
 
+
+  <main id="main">
   <section class="hero">
     <div class="container">
       <h1>מכשיר שפותח<br/>רק מה שאישרתם</h1>
@@ -96,10 +107,10 @@
       <h2>מתחילים ב-4 צעדים</h2>
       <p class="sub">מהכניסה ועד מכשיר נעול בשטח — תוך דקות.</p>
       <div class="steps">
-        <div class="step"><div class="n"></div><div><h4>נכנסים למערכת</h4><p>מתחברים למסך הניהול עם החשבון שלכם.</p></div></div>
-        <div class="step"><div class="n"></div><div><h4>מגדירים את הרשימה</h4><p>בוחרים את הכתובת הראשית ומוסיפים את שאר הכתובות המותרות — למשל שער תשלום.</p></div></div>
-        <div class="step"><div class="n"></div><div><h4>מתקינים ומזינים קוד</h4><p>מתקינים את אפליקציית KioskFleet Agent על המכשיר ומקלידים את קוד הרישום בן שש הספרות.</p></div></div>
-        <div class="step"><div class="n"></div><div><h4>שולטים מרחוק</h4><p>המכשיר מופיע בדשבורד. משם משנים את הרשימה, מחליפים כתובת ומאתחלים — מכל מקום.</p></div></div>
+        <div class="step"><div class="n"></div><div><h3>נכנסים למערכת</h3><p>מתחברים למסך הניהול עם החשבון שלכם.</p></div></div>
+        <div class="step"><div class="n"></div><div><h3>מגדירים את הרשימה</h3><p>בוחרים את הכתובת הראשית ומוסיפים את שאר הכתובות המותרות — למשל שער תשלום.</p></div></div>
+        <div class="step"><div class="n"></div><div><h3>מתקינים ומזינים קוד</h3><p>מתקינים את אפליקציית KioskFleet Agent על המכשיר ומקלידים את קוד הרישום בן שש הספרות.</p></div></div>
+        <div class="step"><div class="n"></div><div><h3>שולטים מרחוק</h3><p>המכשיר מופיע בדשבורד. משם משנים את הרשימה, מחליפים כתובת ומאתחלים — מכל מקום.</p></div></div>
       </div>
     </div>
   </section>
@@ -125,6 +136,10 @@
       </div>
     </div>
   </section>
+
+  </main>
+
+
 
   <footer class="footer">
     <div class="container">
