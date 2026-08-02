@@ -43,15 +43,16 @@ export function flowForCode(code: number): Flow {
 
 /** The parent chain of a code, from itself up to its level-1 root. */
 export function parentChain(code: number, rows: readonly CoaSeedRow[]): CoaSeedRow[] {
-  const byCode = new Map(rows.map((r) => [r.code, r]));
+  const byCode = new Map<number, CoaSeedRow>(rows.map((r): [number, CoaSeedRow] => [r.code, r]));
   const chain: CoaSeedRow[] = [];
   let cur: number | null = code;
   const seen = new Set<number>();
   while (cur != null && byCode.has(cur) && !seen.has(cur)) {
     seen.add(cur);
-    const row = byCode.get(cur)!;
-    chain.push(row);
-    cur = row.parent_code;
+    const node: CoaSeedRow | undefined = byCode.get(cur);
+    if (!node) break;
+    chain.push(node);
+    cur = node.parent_code;
   }
   return chain;
 }

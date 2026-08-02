@@ -105,6 +105,10 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   packages/ingest:
+    dependencies:
+      '@kesef/normalize':
+        specifier: workspace:*
+        version: link:../normalize
     devDependencies:
       typescript:
         specifier: ^5.7.3

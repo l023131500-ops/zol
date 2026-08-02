@@ -4,6 +4,7 @@
  * 403 / CAPTCHA / robots.txt — record status and mark unavailable.
  */
 export * from './datagov';
+export * from './sync-financial';
 
 export interface SyncResult {
   sourceSlug: string;
