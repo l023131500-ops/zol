@@ -53,11 +53,23 @@ if (base) {
     if (req.path !== base) return next();
     res.redirect(301, base + '/' + req.originalUrl.slice(req.path.length));
   });
+  // The service also answers on its own hostname (the one the realtime socket
+  // needs). Someone who types that hostname lands on "/", which is outside the
+  // prefix and would otherwise 404 on a site that is plainly working.
+  app.get('/', (req, res) => res.redirect(302, base + '/'));
 }
 
 const site = express.Router();
 
 site.get('/api/health', health);
+
+// Where the browser should open its realtime socket. The console cannot work
+// this out for itself: it is served from more30.com/kiosk, but that path is a
+// rewrite that will not carry a WebSocket upgrade, so "same host as the page"
+// is the one answer that is definitely wrong in production.
+site.get('/api/config', (req, res) =>
+  res.json({ wsHost: config.wsHost || null, basePath: base || '' }));
+
 site.use('/api/auth', authRoutes);
 site.use('/api', deviceRoutes);
 site.use('/api', linkRoutes);

@@ -20,7 +20,7 @@ import { wsRoute, isWsRoute } from '../src/wspath.js';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 
-function buildApp(base) {
+function buildApp(base, wsHost = null) {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
 
@@ -32,10 +32,12 @@ function buildApp(base) {
       if (req.path !== base) return next();
       res.redirect(301, base + '/' + req.originalUrl.slice(req.path.length));
     });
+    app.get('/', (req, res) => res.redirect(302, base + '/'));
   }
 
   const site = express.Router();
   site.get('/api/health', health);
+  site.get('/api/config', (req, res) => res.json({ wsHost: wsHost || null, basePath: base || '' }));
   site.use('/api/auth', express.Router().post('/login', (req, res) => res.json({ token: 'stub' })));
   site.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
   site.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
@@ -44,8 +46,8 @@ function buildApp(base) {
   return app;
 }
 
-async function withServer(base, fn) {
-  const server = http.createServer(buildApp(base));
+async function withServer(base, fn, wsHost = null) {
+  const server = http.createServer(buildApp(base, wsHost));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
   try { await fn((url, opts) => fetch(origin + url, { redirect: 'manual', ...opts })); }
@@ -81,6 +83,35 @@ test('served under /kiosk', async () => {
     // Assets must NOT be reachable at the root when a prefix is configured —
     // that is what proves the HTML is not emitting root-absolute URLs.
     assert.equal((await get('/css/style.css')).status, 404);
+  });
+});
+
+test('the service hostname lands on the app instead of 404', async () => {
+  // kiosk.more30.com exists so the realtime socket has a host that is not a
+  // rewrite. Someone who types that hostname hits "/", which sits outside the
+  // prefix — it must lead somewhere, not 404 on a working site.
+  await withServer('/kiosk', async (get) => {
+    const root = await get('/');
+    assert.equal(root.status, 302);
+    assert.equal(root.headers.get('location'), '/kiosk/');
+  });
+});
+
+test('the console is told where to open its socket', async () => {
+  // The page cannot infer this: it is served from more30.com/kiosk, and that
+  // path is a rewrite that answers a WebSocket upgrade with 404. "Same host as
+  // the page" is the one answer that is definitely wrong in production.
+  await withServer('/kiosk', async (get) => {
+    const cfg = await (await get('/kiosk/api/config')).json();
+    assert.equal(cfg.wsHost, 'kiosk.more30.com');
+    assert.equal(cfg.basePath, '/kiosk');
+  }, 'kiosk.more30.com');
+
+  // Unset must be null, not the empty string — the client tests it for
+  // truthiness to decide whether to fall back to its own host.
+  await withServer('/kiosk', async (get) => {
+    const cfg = await (await get('/kiosk/api/config')).json();
+    assert.equal(cfg.wsHost, null);
   });
 });
 

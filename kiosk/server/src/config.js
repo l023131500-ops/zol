@@ -33,6 +33,18 @@ export const config = {
   port: Number(process.env.PORT || 8080),
   publicUrl: process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 8080}`,
   basePath: normalizeBasePath(process.env.BASE_PATH),
+  /**
+   * Host to open the realtime WebSocket against, e.g. "kiosk.more30.com".
+   *
+   * Measured, not assumed: a Vercel path rewrite forwards HTTP but answers a
+   * WebSocket upgrade with 404 — more30.com/kiosk can serve the console but
+   * cannot carry its socket. Remote control is the point of this product, so
+   * the socket gets its own hostname pointing straight at this service, while
+   * the console keeps being served from the path the platform standardises on.
+   * Empty = same host as the page (correct for local dev and for reaching this
+   * service directly).
+   */
+  wsHost: (process.env.WS_HOST || '').trim().replace(/^wss?:\/\//, '').replace(/\/+$/, ''),
   /** 'production' opens indexing; anything else shows the test banner and blocks robots. */
   env: process.env.KIOSK_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'development'),
   jwtSecret: required('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'dev-insecure-secret'),

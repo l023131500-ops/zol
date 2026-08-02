@@ -14,6 +14,11 @@ let DEVICES = [];
 // instead of baking it in, so one build serves both.
 const BASE = location.pathname.replace(/\/console\/?$/, '').replace(/\/$/, '');
 
+// Filled from GET /api/config before the socket is opened. When the console is
+// served through more30.com/kiosk the socket must NOT go to the page's own
+// host — that path is a rewrite and answers an upgrade with 404.
+let WS_HOST = null;
+
 async function api(path, opts = {}) {
   const res = await fetch(BASE + '/api' + path, {
     ...opts,
@@ -75,6 +80,10 @@ async function boot() {
   $('#user-name').textContent = ME.fullName || ME.username;
   $('#user-quota').textContent = ME.role === 'admin' ? 'מנהל-על' : `${ME.devicesUsed}/${ME.deviceLimit} מכשירים`;
   if (ME.role === 'admin') $('#menu-admin').classList.remove('hidden');
+  // Ask where the socket lives before opening it. A failure here is not fatal:
+  // WS_HOST stays null, connectSocket falls back to this host, and if that
+  // cannot upgrade the polling fallback covers it.
+  try { WS_HOST = (await api('/config')).wsHost || null; } catch { WS_HOST = null; }
   connectSocket();
   route('devices');
 }
@@ -99,11 +108,24 @@ function startPolling() {
 }
 function stopPolling() { if (POLL) { clearInterval(POLL); POLL = null; } }
 
-function connectSocket() {
+/**
+ * Where to dial. With a dedicated WS host the path is the bare one, because
+ * that host points straight at this service rather than through the prefix.
+ * Without one, fall back to the page's own host and prefix — right for local
+ * dev and for reaching the service directly.
+ */
+function socketUrl() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const q = `?token=${encodeURIComponent(TOKEN)}`;
+  return WS_HOST
+    ? `${proto}://${WS_HOST}/ws/console${q}`
+    : `${proto}://${location.host}${BASE}/ws/console${q}`;
+}
+
+function connectSocket() {
   let sock;
   try {
-    sock = new WebSocket(`${proto}://${location.host}${BASE}/ws/console?token=${encodeURIComponent(TOKEN)}`);
+    sock = new WebSocket(socketUrl());
   } catch {
     return startPolling();
   }
