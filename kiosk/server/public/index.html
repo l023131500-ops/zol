@@ -1,9 +1,24 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KioskFleet — נעילת מכשיר לקישורים מאושרים בלבד</title>
+  <meta name="color-scheme" content="light dark" />
+  <!-- מצב כהה (DESIGN_STANDARD §3). הערכה יושבת ב-css/style.css כ-
+       :root.dark; כאן מדליקים אותה. בתוך ה-<head> ולפני הציור הראשון,
+       ולכן אין הבזק לבן בדרך מדף הבית הכהה של more30. -->
+  <script>
+    (function () {
+      var mq = window.matchMedia("(prefers-color-scheme: dark)");
+      var apply = function (dark) {
+        document.documentElement.classList.toggle("dark", dark);
+      };
+      apply(mq.matches);
+      mq.addEventListener
+        ? mq.addEventListener("change", function (e) { apply(e.matches); })
+        : mq.addListener(function (e) { apply(e.matches); });
+    })();
+  </script>  <title>KioskFleet — נעילת מכשיר לקישורים מאושרים בלבד</title>
   <meta name="description" content="נועלים מכשיר אנדרואיד על רשימת כתובות מאושרות בלבד. המכשיר פותח רק את מה שאישרתם — גם כשאין רשת — ואתם שולטים בו מרחוק ממסך אחד." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

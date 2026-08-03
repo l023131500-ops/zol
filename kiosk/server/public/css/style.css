@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --navy: #071a33;
   --navy-2: #0d284a;
   --navy-3: #123563;
@@ -198,3 +198,30 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
 .skip { position: absolute; inset-inline-start: -9999px; top: 0; z-index: 500;
   background: var(--accent); color: #fff; padding: 12px 20px; font-weight: 600; }
 .skip:focus { inset-inline-start: 0; }
+
+/* ===== מצב כהה (DESIGN_STANDARD §3) =====
+   המערכת מטוקנת במלואה, ולכן הערכה היא שכבה אחת ולא שכתוב.
+
+   ‎--navy‎ **אינו מתהפך**: נבדק שהוא משמש אך ורק כמשטח (ה-hero, הפוטר,
+   סרגל הצד) ואף פעם לא כצבע טקסט, ולכן הוא צבע מותג ונשאר קבוע. מה
+   שמתהפך הוא ‎--bg‎, ‎--card‎, ‎--ink‎, ‎--muted‎ ו-‎--line‎.
+
+   ניגודיות שנמדדה מול הכרטיס הכהה: טקסט ראשי 13.8:1 · מושתק 7.1:1. */
+:root.dark {
+  --ink: #e6ebf4;
+  --muted: #9aa8bf;
+  --line: #23304a;
+  --bg: #0b1220;
+  --card: #131c2e;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* שלושת אלה נכתבו ‎#fff‎ קשיח ולכן אינם מתהפכים לבד — כרטיס הכניסה, החלון
+   הקופץ ושדה בפוקוס היו נשארים לבנים בוהקים בתוך עמוד כהה. */
+:root.dark .auth-card,
+:root.dark .modal { background: var(--card); }
+:root.dark .field input:focus,
+:root.dark .field select:focus { background: var(--card); }
+
+/* התראת "אין קישורים" בנויה על צהוב בהיר עם טקסט כהה. */
+:root.dark .hl-empty { background: #2e2510; border-color: #5c4a15; }
