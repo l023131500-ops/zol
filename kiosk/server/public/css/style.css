@@ -56,6 +56,29 @@ h1, h2, h3 { line-height: 1.25; margin: 0 0 .4em; }
 .nav-links a { color: #cdd8ea; font-weight: 500; }
 .nav-links a:hover { color: #fff; }
 
+/* The shared more30 login pill is `position: fixed` at the inline-end edge of
+   the viewport, which in Hebrew is the top-left corner — exactly where a
+   `justify-between` nav puts its last control. Here that control is "כניסת
+   לקוחות", the only way into the customer console from this page.
+
+   Measured on more30.com/kiosk/ before this rule: the pill was the element
+   painted on top at 901–1280px wide (72×32 covered at 1100, 22×32 at 1280),
+   so the click landed on the pill and not on the link. 390 and 1440 were both
+   clear, which is why two-width testing never saw it: below 901 .nav-links is
+   display:none, and above ~1310 the 1180px container has pulled far enough
+   away from the viewport edge on its own.
+
+   The pill publishes the room it actually occupies in --more30-auth-inset
+   (edge inset + its real width + gap), because that width changes with the
+   signed-in name and the loaded font. The container's own centring gutter is
+   subtracted from it, so nothing moves on wide screens; the 20px floor is the
+   padding .container already had. */
+@media (min-width: 901px) {
+  .nav .container {
+    padding-inline-end: max(20px, calc(var(--more30-auth-inset, 104px) - max(0px, (100vw - 1180px) / 2)));
+  }
+}
+
 .hero {
   /* background-color separately from background-image, and not merged into the
      `background` shorthand: axe cannot resolve a gradient, so it falls back to
