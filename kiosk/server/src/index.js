@@ -18,15 +18,33 @@ ensureSeed();
 
 const app = express();
 app.set('trust proxy', 1);
+
+// The pages here carry more30's shared login pill
+// (<script src="https://more30.com/auth-button.js">), and that pill is not only
+// a badge: the one call it makes on load records the visitor as a customer of
+// this system and asks the server whether to offer "ניהול". Under a policy that
+// does not name the platform API, both requests are refused before they leave
+// the page — the pill still renders and still shows the signed-in name, so the
+// failure is completely invisible from the outside. Measured on 06/08:
+// more30.com/kiosk was the only mount of twenty-one where that fetch could not
+// complete (scripts/qa/csp-blocks-auth.mjs in the more30 monorepo).
+//
+// Both entries are the platform's own origins and nothing wider: the API host
+// for the calls, and more30.com for the script itself. 'self' happens to cover
+// the script today only because the page is served at more30.com/kiosk — on
+// this service's own hostname it is a different origin and would be blocked.
+const PLATFORM_API = 'https://uhnrgujbdxhhmoxcjria.supabase.co';
+const PLATFORM_ORIGIN = 'https://more30.com';
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", PLATFORM_ORIGIN],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'", 'ws:', 'wss:'],
+      connectSrc: ["'self'", 'ws:', 'wss:', PLATFORM_API],
     },
   },
 }));
