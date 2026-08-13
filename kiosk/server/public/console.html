@@ -46,6 +46,23 @@
     .pw-toggle svg[data-icon="eye-off"],
     .pw-toggle[aria-pressed="true"] svg[data-icon="eye"] { display: none; }
     .pw-toggle[aria-pressed="true"] svg[data-icon="eye-off"] { display: block; }
+
+    /* פריטי הניווט הם <button> ולא <a> חסר href, ולכן הם על מסלול ה-Tab
+       (WCAG 2.1.1 רמה A). style.css מסגנן .side nav a בלבד, ולכן הכללים
+       המקבילים יושבים כאן; הם אינם מבטלים את הקיימים אלא מוסיפים להם.
+       .hidden הוא display:none !important ולכן ממשיך לנצח את השורה הראשונה,
+       ופריט «ניהול-על» נשאר מוסתר למי שאינו אדמין. */
+    .side nav button[data-view] {
+      display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+      border-radius: 11px; color: #b8c6dd; font-weight: 500; margin-bottom: 4px;
+      cursor: pointer; width: 100%; background: none; border: none;
+      font-family: inherit; font-size: inherit; text-align: start;
+    }
+    .side nav button[data-view]:hover { background: rgba(255,255,255,.06); color: #fff; }
+    .side nav button[data-view].active { background: var(--accent); color: #fff; }
+    /* הסרגל כהה, ולכן טבעת המיקוד לבנה ולא בצבע ההדגשה. */
+    .side nav button[data-view]:focus-visible,
+    .side .userbox #logout-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   </style>
   <!-- The platform-wide login pill. One file, loaded by every more30 system. -->
   <script src="https://more30.com/auth-button.js" defer></script>
@@ -58,7 +75,7 @@
       <h2>כניסה למערכת</h2>
       <p class="hint">הזינו את שם המשתמש והסיסמה שקיבלתם</p>
       <div id="login-error" class="alert alert-error hidden"></div>
-      <div class="field"><label>שם משתמש</label><input id="login-user" autocomplete="username" required /></div>
+      <div class="field"><label for="login-user">שם משתמש</label><input id="login-user" autocomplete="username" required /></div>
       <div class="field">
         <label for="login-pass">סיסמה</label>
         <div class="pw-wrap">
@@ -83,17 +100,17 @@
     <aside class="side">
       <div class="brand"><span class="logo">◈</span> KioskFleet</div>
       <nav id="menu">
-        <a data-view="devices" class="active">🖥️ המכשירים שלי</a>
-        <a data-view="links">🔗 ספריית קישורים</a>
-        <a data-view="enroll">➕ הוספת מכשיר</a>
-        <a data-view="guide">📖 הוראות הפעלה</a>
-        <a data-view="admin" id="menu-admin" class="hidden">👑 ניהול-על</a>
-        <a data-view="settings">⚙️ הגדרות</a>
+        <button type="button" data-view="devices" class="active">🖥️ המכשירים שלי</button>
+        <button type="button" data-view="links">🔗 ספריית קישורים</button>
+        <button type="button" data-view="enroll">➕ הוספת מכשיר</button>
+        <button type="button" data-view="guide">📖 הוראות הפעלה</button>
+        <button type="button" data-view="admin" id="menu-admin" class="hidden">👑 ניהול-על</button>
+        <button type="button" data-view="settings">⚙️ הגדרות</button>
       </nav>
       <div class="userbox">
         <div id="user-name">—</div>
         <div id="user-quota" style="color:#8fa2c0;margin:6px 0 12px"></div>
-        <a id="logout-btn" class="btn btn-ghost btn-sm">התנתקות</a>
+        <button type="button" id="logout-btn" class="btn btn-ghost btn-sm">התנתקות</button>
       </div>
     </aside>
 
