@@ -276,7 +276,10 @@ function mapDevice(d) {
 // ── routing ─────────────────────────────────────────────────────
 let CURRENT = 'devices';
 $('#menu').addEventListener('click', (e) => {
-  const a = e.target.closest('a[data-view]'); if (!a) return;
+  // Tag-agnostic on purpose: the menu items are <button> so they sit on the
+  // Tab path (WCAG 2.1.1). This also still matches the old <a data-view>,
+  // so it is safe to ship ahead of the markup change.
+  const a = e.target.closest('[data-view]'); if (!a) return;
   route(a.dataset.view);
 });
 function route(view) {
