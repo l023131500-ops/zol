@@ -63,6 +63,17 @@
     /* הסרגל כהה, ולכן טבעת המיקוד לבנה ולא בצבע ההדגשה. */
     .side nav button[data-view]:focus-visible,
     .side .userbox #logout-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    /* כדור הכניסה המשותף <more30-auth> קבוע בפינה העליונה של החלון, וב-RTL זו
+       הפינה השמאלית — בדיוק המקום ש-justify-content:space-between מניח בו את
+       כפתורי הפעולה של .topbar. נמדד בייצור 13/08: הכדור 16..92 והכפתור
+       «הוספת מכשיר» 34..155, ו-elementFromPoint(60,40) החזיר MORE30-AUTH,
+       כלומר החצי הימני של הכפתור אינו לחיץ כלל.
+       auth-button.js מפרסם --more30-auth-inset על documentElement (104px כאן);
+       מחסירים ממנו את 34px שה-.main כבר נותן, כדי לא לספור את אותו מרווח פעמיים.
+       ה-max(0px, …) מגן מפני ערך inset קטן מהריפוד הקיים. wrap+gap כדי שבמסך
+       צר הכפתורים ירדו לשורה שנייה במקום להידחס. */
+    .topbar { padding-inline-end: max(0px, calc(var(--more30-auth-inset, 124px) - 34px));
+              flex-wrap: wrap; gap: 10px 12px; }
   </style>
   <!-- The platform-wide login pill. One file, loaded by every more30 system. -->
   <script src="https://more30.com/auth-button.js" defer></script>
