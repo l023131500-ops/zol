@@ -12,7 +12,7 @@ let DEVICES = [];
 // The server can be mounted under a prefix (more30.com/kiosk) or at the root
 // (the Railway URL, local dev). Derive it from where this page actually is
 // instead of baking it in, so one build serves both.
-const BASE = location.pathname.replace(/\/console\/?$/, '').replace(/\/$/, '');
+const BASE = location.pathname.replace(/\/console(?:\.html)?\/?$/, '').replace(/\/$/, '');
 
 // Filled from GET /api/config before the socket is opened. When the console is
 // served through more30.com/kiosk the socket must NOT go to the page's own
