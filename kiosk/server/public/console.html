@@ -25,6 +25,28 @@
        root (Railway URL, local dev) and under more30.com/kiosk/. A leading
        slash would send the browser to more30.com/css/style.css. -->
   <link rel="stylesheet" href="css/style.css" />
+  <!-- כפתור «הצג סיסמה». זהו שדה הסיסמה היחיד במערכת, ולכן הכללים יושבים
+       כאן ולא ב-css/style.css המשותף. אחרי הקישור לגיליון, כדי ש-
+       .pw-wrap input ינצח את .field input באותה ספציפיות. -->
+  <style>
+    .pw-wrap { position: relative; display: block; }
+    /* הדף dir="rtl" והשדה אינו מצהיר dir משלו, ולכן הטקסט מיושר לימין
+       והקצה השמאלי הוא הפנוי; הריפוד מונע מערך ארוך לרוץ מתחת לכפתור. */
+    .pw-wrap input { padding-left: 44px; }
+    .pw-toggle { position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+                 width: 32px; height: 32px; display: flex; align-items: center;
+                 justify-content: center; padding: 0; border: none; background: none;
+                 border-radius: 8px; color: var(--muted); cursor: pointer; }
+    .pw-toggle:hover { color: var(--accent); }
+    .pw-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* החלפת האייקון נגזרת מ-aria-pressed ולא מהתכונה hidden: hidden אינה חלה
+       על אלמנט SVG (כלל [hidden] של הדפדפן הוא במרחב השמות של HTML בלבד),
+       ולכן שני האייקונים היו נצבעים זה על זה. מקור אמת אחד. */
+    .pw-toggle svg { width: 18px; height: 18px; display: block; }
+    .pw-toggle svg[data-icon="eye-off"],
+    .pw-toggle[aria-pressed="true"] svg[data-icon="eye"] { display: none; }
+    .pw-toggle[aria-pressed="true"] svg[data-icon="eye-off"] { display: block; }
+  </style>
   <!-- The platform-wide login pill. One file, loaded by every more30 system. -->
   <script src="https://more30.com/auth-button.js" defer></script>
 </head>
@@ -37,7 +59,20 @@
       <p class="hint">הזינו את שם המשתמש והסיסמה שקיבלתם</p>
       <div id="login-error" class="alert alert-error hidden"></div>
       <div class="field"><label>שם משתמש</label><input id="login-user" autocomplete="username" required /></div>
-      <div class="field"><label>סיסמה</label><input id="login-pass" type="password" autocomplete="current-password" required /></div>
+      <div class="field">
+        <label for="login-pass">סיסמה</label>
+        <div class="pw-wrap">
+          <input id="login-pass" type="password" autocomplete="current-password" required />
+          <!-- type="button" מפורש: בתוך <form> כפתור בלי type הוא submit,
+               וכל לחיצה על «הצג» הייתה שולחת את הטופס. -->
+          <button type="button" class="pw-toggle" id="login-pass-toggle"
+                  aria-pressed="false" aria-controls="login-pass"
+                  aria-label="הצג סיסמה" title="הצג סיסמה">
+            <svg data-icon="eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg data-icon="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 5.2A9.8 9.8 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6A17.6 17.6 0 0 0 2 12s3.5 7 10 7a9.8 9.8 0 0 0 4.1-.9"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="m2 2 20 20"/></svg>
+          </button>
+        </div>
+      </div>
       <button class="btn btn-primary" style="width:100%" type="submit">כניסה</button>
       <p class="hint" style="margin-top:18px"><a href="./">← חזרה לאתר</a></p>
     </form>
@@ -71,5 +106,24 @@
   <div id="toast-root"></div>
 
   <script src="js/app.js"></script>
+  <!-- הגילוי מקומי לדף הזה ואינו נוגע ב-js/app.js. הסקריפט רץ אחרי הטופס
+       ב-DOM, ולכן אין צורך ב-DOMContentLoaded. -->
+  <script>
+    (function () {
+      var input = document.getElementById("login-pass");
+      var btn = document.getElementById("login-pass-toggle");
+      if (!input || !btn) return;
+      btn.addEventListener("click", function () {
+        var reveal = input.type === "password";
+        input.type = reveal ? "text" : "password";
+        // aria-pressed הוא גם מצב הכפתור לקורא מסך וגם מה שמחליף את האייקון.
+        btn.setAttribute("aria-pressed", reveal ? "true" : "false");
+        var label = reveal ? "הסתר סיסמה" : "הצג סיסמה";
+        btn.setAttribute("aria-label", label);
+        btn.setAttribute("title", label);
+        input.focus();
+      });
+    })();
+  </script>
 </body>
 </html>
