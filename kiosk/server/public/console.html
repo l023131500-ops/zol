@@ -9,14 +9,21 @@
        ולכן אין הבזק לבן בדרך מדף הבית הכהה של more30. -->
   <script>
     (function () {
+      var KEY = "kiosk-theme";
       var mq = window.matchMedia("(prefers-color-scheme: dark)");
       var apply = function (dark) {
         document.documentElement.classList.toggle("dark", dark);
       };
-      apply(mq.matches);
-      mq.addEventListener
-        ? mq.addEventListener("change", function (e) { apply(e.matches); })
-        : mq.addListener(function (e) { apply(e.matches); });
+      var stored = null;
+      try { stored = localStorage.getItem(KEY); } catch (e) {}
+      if (stored === "dark" || stored === "light") {
+        apply(stored === "dark");
+      } else {
+        apply(mq.matches);
+        mq.addEventListener
+          ? mq.addEventListener("change", function (e) { apply(e.matches); })
+          : mq.addListener(function (e) { apply(e.matches); });
+      }
     })();
   </script>  <title>KioskFleet — מערכת ניהול</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -74,11 +81,30 @@
        צר הכפתורים ירדו לשורה שנייה במקום להידחס. */
     .topbar { padding-inline-end: max(0px, calc(var(--more30-auth-inset, 124px) - 34px));
               flex-wrap: wrap; gap: 10px 12px; }
+
+    /* מתג מצב-כהה ידני (POLISH_BACKLOG). מיקום קבוע בפינה הימנית-עליונה
+       (הצד הפיזי הנגדי לכדור הכניסה המשותף, שיושב בפינה השמאלית-עליונה גם
+       ב-RTL — ראה ההערה למעלה על --more30-auth-inset), כדי שלא יתנגשו.
+       גלוי על שני המסכים (login-view + app-view) כי הוא יושב מחוץ לשניהם. */
+    #themeToggle {
+      position: fixed; top: 12px; right: 12px; z-index: 60;
+      width: 40px; height: 40px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; padding: 0;
+      border: 1px solid var(--line); background: var(--card); color: var(--ink);
+      font-size: 18px; line-height: 1; cursor: pointer; box-shadow: var(--shadow);
+    }
+    #themeToggle:hover { background: var(--bg); }
+    #themeToggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   </style>
   <!-- The platform-wide login pill. One file, loaded by every more30 system. -->
   <script src="https://more30.com/auth-button.js" defer></script>
 </head>
 <body>
+  <!-- מתג מצב-כהה ידני. מחוץ ל-#login-view/#app-view בכוונה, כדי שיישאר
+       גלוי בלי קשר לאיזה מהם מוצג. -->
+  <button type="button" id="themeToggle" aria-pressed="false"
+          aria-label="עבור למצב כהה" title="החלף מצב כהה/בהיר">🌙</button>
+
   <!-- Login -->
   <div id="login-view" class="auth-wrap">
     <form class="auth-card" id="login-form">
@@ -150,6 +176,30 @@
         btn.setAttribute("aria-label", label);
         btn.setAttribute("title", label);
         input.focus();
+      });
+    })();
+  </script>
+  <!-- מתג מצב-כהה ידני: קורא/כותב ל-localStorage, אותו מפתח שהתסריט
+       ב-<head> קורא לפני הציור הראשון (POLISH_BACKLOG, אותה תבנית כמו
+       02/03/06/10). -->
+  <script>
+    (function () {
+      var KEY = "kiosk-theme";
+      var btn = document.getElementById("themeToggle");
+      if (!btn) return;
+      var setIcon = function (dark) {
+        btn.textContent = dark ? "☀️" : "🌙";
+        btn.setAttribute("aria-pressed", dark ? "true" : "false");
+        var label = dark ? "עבור למצב בהיר" : "עבור למצב כהה";
+        btn.setAttribute("aria-label", label);
+        btn.setAttribute("title", label);
+      };
+      setIcon(document.documentElement.classList.contains("dark"));
+      btn.addEventListener("click", function () {
+        var dark = !document.documentElement.classList.contains("dark");
+        document.documentElement.classList.toggle("dark", dark);
+        try { localStorage.setItem(KEY, dark ? "dark" : "light"); } catch (e) {}
+        setIcon(dark);
       });
     })();
   </script>
