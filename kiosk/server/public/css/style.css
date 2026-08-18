@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --navy: #071a33;
   --navy-2: #0d284a;
   --navy-3: #123563;
@@ -144,7 +144,7 @@ h1, h2, h3 { line-height: 1.25; margin: 0 0 .4em; }
 .auth-card p.hint { text-align: center; color: var(--muted); margin-top: 0; }
 
 .field { margin-bottom: 16px; }
-.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #33455f; }
+.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--muted); }
 .field input, .field select {
   width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px;
   font-family: inherit; font-size: 15px; background: #fbfcfe;
@@ -238,6 +238,10 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
   --card: #131c2e;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
+
+/* a { color: var(--accent) } fixed #2a61e8 directly on a dark surface measures 3.22:1, under 4.5.
+   --accent itself also backs .btn-primary etc with white text, so it must not flip - override only plain link text color. */
+:root.dark a { color: #6ea0ff; }
 
 /* שלושת אלה נכתבו ‎#fff‎ קשיח ולכן אינם מתהפכים לבד — כרטיס הכניסה, החלון
    הקופץ ושדה בפוקוס היו נשארים לבנים בוהקים בתוך עמוד כהה. */
