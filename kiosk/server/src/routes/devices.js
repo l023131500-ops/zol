@@ -5,6 +5,7 @@ import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { hostAllowed, hostsForUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
+import { buildWindowsKioskScript } from '../windowspackage.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -59,6 +60,32 @@ router.get('/devices/:id/screenshot', requireAuth, (req, res) => {
   if (error) return res.sendStatus(error);
   if (!device.last_screenshot) return res.sendStatus(404);
   res.json({ image: device.last_screenshot, takenAt: device.last_screenshot_at });
+});
+
+// KIOSK_BUILD.md §3 Route C / §10: a device row already holds everything the
+// Windows package needs (homeUrl, allowedHost, name) — the same fields Route
+// B's enrollment/update_config already build a device identity from — so
+// there is nothing new to configure here beyond picking this device.
+// text/plain rather than JSON: the console downloads this as a .ps1 file
+// (see downloadFile() in app.js), not something it parses.
+router.get('/devices/:id/windows-package', requireAuth, (req, res) => {
+  const { device, error } = getOwnedDevice(req, req.params.id);
+  if (error) return res.sendStatus(error);
+  let script;
+  try {
+    script = buildWindowsKioskScript({
+      deviceName: device.name, homeUrl: device.home_url, allowedHost: device.allowed_host,
+      idleTimeoutMinutes: device.idle_return_seconds ? Math.ceil(device.idle_return_seconds / 60) : undefined,
+    });
+  } catch (e) {
+    // Only reachable for a device enrolled before home_url was required, or
+    // one an owner cleared without setting a replacement — every other path
+    // to a device row already enforces a valid home_url (see enrollments'
+    // own `new URL(homeUrl)` check above).
+    return res.status(400).json({ error: e.message });
+  }
+  res.setHeader('Content-Disposition', `attachment; filename="kioskfleet-${device.serial}.ps1"`);
+  res.type('text/plain; charset=utf-8').send(script);
 });
 
 // ── Client approvals (KIOSK_BUILD.md §2★ד/ה) ──────────────────────

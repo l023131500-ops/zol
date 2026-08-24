@@ -29,6 +29,27 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// api() always parses JSON — wrong for a generated file the browser should
+// save rather than the console reading as data (KIOSK_BUILD.md §3 Route C's
+// Windows package). Same auth header, but the response becomes a Blob
+// handed to a throwaway <a download> instead.
+async function downloadFile(path, filename) {
+  const res = await fetch(BASE + '/api' + path, {
+    headers: TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'שגיאה בשרת');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = el(`<a href="${url}" download="${esc(filename)}"></a>`);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function toast(msg, ok = true) {
   const t = el(`<div class="toast" style="background:${ok ? '#0b1220' : '#b91c1c'}">${esc(msg)}</div>`);
   $('#toast-root').appendChild(t);
@@ -366,6 +387,7 @@ function deviceCard(d) {
   mk('📸 צילום מסך', () => cmd(d, 'screenshot'));
   if (d.lastScreenshotAt) mk('🖼️ צילום אחרון', () => viewScreenshot(d));
   mk('📋 יומן', () => viewDeviceLog(d));
+  mk('🪟 חבילת Windows', () => downloadFile(`/devices/${d.id}/windows-package`, `kioskfleet-${d.serial}.ps1`).catch((e) => toast(e.message, false)));
   mk('✏️ עריכה', () => editDevice(d));
   mk('🗑️', () => confirmDelete(d), 'btn-danger');
   return c;
