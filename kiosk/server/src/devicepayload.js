@@ -34,6 +34,7 @@ export const CONSOLE_DEVICE_FIELDS = [
   'battery', 'model', 'android_ver', 'ip', 'created_at', 'exit_code',
   'last_screenshot_at', 'display_zoom_percent',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
+  'signage_enabled', 'signage_urls', 'signage_interval_seconds',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */

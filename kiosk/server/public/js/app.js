@@ -287,7 +287,10 @@ function mapDevice(d) {
     displayZoomPercent: d.display_zoom_percent ?? d.displayZoomPercent ?? 100,
     scheduleEnabled: d.schedule_enabled === 1 || d.schedule_enabled === true || d.scheduleEnabled === true,
     scheduleOpenTime: d.schedule_open_time || d.scheduleOpenTime || '',
-    scheduleCloseTime: d.schedule_close_time || d.scheduleCloseTime || '' };
+    scheduleCloseTime: d.schedule_close_time || d.scheduleCloseTime || '',
+    signageEnabled: d.signage_enabled === 1 || d.signage_enabled === true || d.signageEnabled === true,
+    signageUrls: d.signage_urls || d.signageUrls || '',
+    signageIntervalSeconds: d.signage_interval_seconds ?? d.signageIntervalSeconds ?? 15 };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -341,7 +344,7 @@ function deviceCard(d) {
     </div>
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
-      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}</div>
+      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}</div>
     <div class="actions"></div></div>`);
   const acts = $('.actions', c);
   const mk = (label, fn, cls = 'btn-light') => { const b = el(`<button class="btn ${cls} btn-sm">${label}</button>`); b.onclick = fn; acts.appendChild(b); };
@@ -450,6 +453,14 @@ async function editDevice(d) {
         <div style="flex:1"><label style="font-size:12px">שעת סגירה</label><input id="sched-close" type="time" value="${esc(d.scheduleCloseTime || '21:00')}" dir="ltr" /></div>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:4px">מחוץ לשעות אלה המסך יכבה אוטומטית; בתוך השעות — יידלק. תומך בחלון לילי (למשל 22:00–06:00).</div></div>
+    <div class="field"><label><input id="sig-on" type="checkbox" ${d.signageEnabled ? 'checked' : ''} /> מצב תצוגה (סבב תוכן אוטומטי בזמן חוסר פעילות)</label>
+      <div id="sig-fields" style="display:${d.signageEnabled ? 'block' : 'none'};margin-top:6px">
+        <div style="margin-bottom:8px"><label style="font-size:12px">קישורי תצוגה (אחד בכל שורה)</label>
+          <textarea id="sig-urls" style="width:100%;height:80px;font-family:monospace;font-size:12px" dir="ltr" placeholder="https://example.com/promo1&#10;https://example.com/promo2">${esc(d.signageUrls)}</textarea></div>
+        <div style="max-width:200px"><label style="font-size:12px">זמן החלפה (שניות)</label>
+          <input id="sig-interval" type="number" min="3" max="3600" value="${d.signageIntervalSeconds || 15}" dir="ltr" /></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">רק כאשר אין אינטראקציה מעבר לזמן החזרה האוטומטית שהוגדר למעלה; כל נגיעה במסך חוזרת מיד לקישור הראשי. הקישורים חייבים להיות בתוך הדומיינים המורשים של המכשיר.</div></div>
     <div class="field"><label>קוד תחזוקה מקומי (5 הקשות בפינת המסך)</label>
       <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
       <div style="font-size:12px;color:var(--muted);margin-top:-8px">
@@ -463,14 +474,17 @@ async function editDevice(d) {
   const hl = hostListEditor($('#hl', m), d.allowedHost, homeHost);
   $('#zoom', m).oninput = (e) => { $('#zoom-val', m).textContent = `${e.target.value}%`; };
   $('#sched-on', m).onchange = (e) => { $('#sched-fields', m).style.display = e.target.checked ? 'flex' : 'none'; };
+  $('#sig-on', m).onchange = (e) => { $('#sig-fields', m).style.display = e.target.checked ? 'block' : 'none'; };
   loadDeviceClients(d, m);
 
   $('#s', m).onclick = async () => {
     // Adopt a domain that was typed but not added, rather than dropping it.
     if (!hl.commitPending()) return;
     const scheduleEnabled = $('#sched-on', m).checked;
+    const signageEnabled = $('#sig-on', m).checked;
     const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value),
-      scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value };
+      scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value,
+      signageEnabled, signageUrls: $('#sig-urls', m).value, signageIntervalSeconds: Number($('#sig-interval', m).value) };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }

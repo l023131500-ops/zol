@@ -50,6 +50,9 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private var tapResetRunnable: Runnable? = null
     private var relockRunnable: Runnable? = null
     private val idleRunnable = Runnable { returnToVenue() }
+    private var signageRunnable: Runnable? = null
+    private var signageIndex = 0
+    private var isSignageActive = false
 
     /**
      * True if a host is inside an allow-list (event domain + payment gateway).
@@ -102,7 +105,53 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
             clearBrowsingSession()
             webView.loadUrl(venue)
             webView.clearHistory()
+            startSignageIfEnabled()
         }
+    }
+
+    /**
+     * KIOSK_BUILD.md §9 "מצב תצוגה (Digital Signage): רוטציית תוכן/מדיה כשאין
+     * אינטראקציה" — was entirely unbuilt; the only existing idle behaviour
+     * was a single, one-time `returnToVenue()`. Only ever entered from there,
+     * i.e. genuinely "no interaction", never from a server-pushed config
+     * change or an operator's own "עמוד הבית" tap (`switchToHome()`), which
+     * both mean an active management/operator action, not idle content.
+     *
+     * Playlist URLs are gated through `hostAllowed(..., deviceAllowedHosts)` —
+     * the same scope `returnToVenue()`'s own HOME_URL is checked against —
+     * deliberately not a wider scope: signage content lives in the business
+     * owner's own already-approved domains, the same trust boundary as the
+     * rest of the locked device, rather than opening a second, unvetted way
+     * off the allow-list. A URL outside that scope is skipped, not treated as
+     * a reason to stop rotating — one misconfigured line must not blank the
+     * whole playlist.
+     */
+    private fun startSignageIfEnabled() {
+        if (Prefs.get(this, Prefs.SIGNAGE_ENABLED, "0") != "1") return
+        val urls = Prefs.get(this, Prefs.SIGNAGE_URLS, "").split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        if (urls.isEmpty()) return
+        val intervalMs = (Prefs.get(this, Prefs.SIGNAGE_INTERVAL, "15").toIntOrNull() ?: 15)
+            .coerceIn(3, 3600) * 1000L
+        isSignageActive = true
+        signageIndex = 0
+        advanceSignage(urls, intervalMs)
+    }
+
+    private fun advanceSignage(urls: List<String>, intervalMs: Long) {
+        if (!isSignageActive) return
+        val url = urls[signageIndex % urls.size]
+        signageIndex++
+        val host = try { android.net.Uri.parse(url).host } catch (e: Exception) { null }
+        if (hostAllowed(host, deviceAllowedHosts)) webView.loadUrl(url)
+        signageRunnable = Runnable { advanceSignage(urls, intervalMs) }
+        mainHandler.postDelayed(signageRunnable!!, intervalMs)
+    }
+
+    /** Any real interaction ends signage immediately — it is idle-only content, never something a customer browses. */
+    private fun stopSignage() {
+        signageRunnable?.let { mainHandler.removeCallbacks(it) }
+        signageRunnable = null
+        isSignageActive = false
     }
 
     /**
@@ -245,7 +294,10 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
             }
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                Prefs.set(this@KioskActivity, Prefs.LAST_URL, url)
+                // A signage slide is idle content, not "where the customer left
+                // off" — recording it here would make a crash/OTA/reboot resume
+                // on a rotating ad instead of the device's real home/last page.
+                if (!isSignageActive) Prefs.set(this@KioskActivity, Prefs.LAST_URL, url)
                 injectLinkGuard(view)
                 applyZoom(view)
             }
@@ -363,7 +415,11 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
             // A pushed home-link change always means "go back to the device's
             // own home" — exit whatever client scope (if any) was active, the
             // same as onSetUrl/returnToVenue already do for their own
-            // navigations back to the baseline.
+            // navigations back to the baseline. Also ends any signage rotation
+            // in progress: an operator's own config push is an active
+            // management action, not idle content, and would otherwise race
+            // the next scheduled `advanceSignage()` against this navigation.
+            stopSignage()
             activeClientCode = null
             allowedHosts = host
             if (hostAllowed(android.net.Uri.parse(homeUrl).host)) webView.loadUrl(homeUrl)
@@ -399,8 +455,18 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private fun setupTouchInterceptor() {
         webView.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
-                resetIdleTimer()  // any interaction keeps the customer's session alive
-                if (event.x <= CORNER_SIZE_PX && event.y <= CORNER_SIZE_PX) handleCornerTap()
+                if (isSignageActive) {
+                    // The first touch on rotating signage only ever exits back
+                    // to the interactive kiosk — it does not count toward the
+                    // corner-tap gesture below, the same "no rights beyond what
+                    // was already granted" default §2★ה's own selection dialog
+                    // documents for switchToHome()/switchToClient().
+                    stopSignage()
+                    switchToHome()
+                } else {
+                    resetIdleTimer()  // any interaction keeps the customer's session alive
+                    if (event.x <= CORNER_SIZE_PX && event.y <= CORNER_SIZE_PX) handleCornerTap()
+                }
             }
             false
         }

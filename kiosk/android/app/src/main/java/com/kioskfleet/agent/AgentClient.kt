@@ -149,6 +149,16 @@ class AgentClient(
                 val zoom = cfg.optInt("displayZoomPercent", Prefs.get(ctx, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100)
                 val zoomChanged = zoom.toString() != Prefs.get(ctx, Prefs.DISPLAY_ZOOM)
                 if (zoomChanged) Prefs.set(ctx, Prefs.DISPLAY_ZOOM, zoom.toString())
+                // KIOSK_BUILD.md §9 "מצב תצוגה": same "must land on its own" shape
+                // as adminCode/approvedClients above — an owner toggling signage
+                // does not necessarily touch home_url, so it must not wait for an
+                // unrelated home-link edit to reach the device.
+                val signageEnabled = if (cfg.optBoolean("signageEnabled", Prefs.get(ctx, Prefs.SIGNAGE_ENABLED, "0") == "1")) "1" else "0"
+                if (signageEnabled != Prefs.get(ctx, Prefs.SIGNAGE_ENABLED, "0")) Prefs.set(ctx, Prefs.SIGNAGE_ENABLED, signageEnabled)
+                val signageUrls = cfg.optString("signageUrls", Prefs.get(ctx, Prefs.SIGNAGE_URLS, ""))
+                if (signageUrls != Prefs.get(ctx, Prefs.SIGNAGE_URLS, "")) Prefs.set(ctx, Prefs.SIGNAGE_URLS, signageUrls)
+                val signageInterval = cfg.optInt("signageIntervalSeconds", Prefs.get(ctx, Prefs.SIGNAGE_INTERVAL).toIntOrNull() ?: 15)
+                if (signageInterval.toString() != Prefs.get(ctx, Prefs.SIGNAGE_INTERVAL)) Prefs.set(ctx, Prefs.SIGNAGE_INTERVAL, signageInterval.toString())
                 if (home.isNotEmpty()) {
                     val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
                         host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
@@ -207,12 +217,24 @@ class AgentClient(
                         Prefs.get(ctx, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100)
                     val approvedClientsJson = payload.optJSONArray("approvedClients")?.toString()
                         ?: Prefs.get(ctx, Prefs.APPROVED_CLIENTS, "[]")
+                    // KIOSK_BUILD.md §9 "מצב תצוגה": persisted the same silent way
+                    // as adminCode/approvedClients above — KioskActivity reads it
+                    // straight from Prefs when the idle timer fires, no new
+                    // CommandHandler parameter needed.
+                    val signageEnabled = if (payload.optBoolean("signageEnabled",
+                            Prefs.get(ctx, Prefs.SIGNAGE_ENABLED, "0") == "1")) "1" else "0"
+                    val signageUrls = payload.optString("signageUrls", Prefs.get(ctx, Prefs.SIGNAGE_URLS, ""))
+                    val signageInterval = payload.optInt("signageIntervalSeconds",
+                        Prefs.get(ctx, Prefs.SIGNAGE_INTERVAL).toIntOrNull() ?: 15)
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
                     Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
                     Prefs.set(ctx, Prefs.DISPLAY_ZOOM, zoom.toString())
                     Prefs.set(ctx, Prefs.APPROVED_CLIENTS, approvedClientsJson)
+                    Prefs.set(ctx, Prefs.SIGNAGE_ENABLED, signageEnabled)
+                    Prefs.set(ctx, Prefs.SIGNAGE_URLS, signageUrls)
+                    Prefs.set(ctx, Prefs.SIGNAGE_INTERVAL, signageInterval.toString())
                     ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }

@@ -8,6 +8,7 @@ import { hostsForUrl, hostAllowed, normalizeHostCsv, parseHosts } from '../hosts
 import { validateExitCode } from '../exitcode.js';
 import { clampZoomPercent } from '../display.js';
 import { validateScheduleWindow } from '../schedule.js';
+import { validateSignagePlaylist, validateSignageInterval } from '../signage.js';
 
 // Rebuilt and pushed on every write that can change what a device's own
 // selection screen should offer (KIOSK_BUILD.md §2★ה) — approving/revoking a
@@ -19,6 +20,8 @@ function pushConfigUpdate(device, userId) {
     homeUrl: device.home_url, allowedHost: device.allowed_host, idleReturnSeconds: device.idle_return_seconds,
     adminCode: device.exit_code || '', displayZoomPercent: device.display_zoom_percent,
     approvedClients: approvedClientsForDevice(device.id),
+    signageEnabled: !!device.signage_enabled, signageUrls: device.signage_urls || '',
+    signageIntervalSeconds: device.signage_interval_seconds,
   }, userId ?? null);
 }
 
@@ -63,7 +66,8 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
   const { device, error } = getOwnedDevice(req, req.params.id);
   if (error) return res.sendStatus(error);
   let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent,
-        scheduleEnabled, scheduleOpenTime, scheduleCloseTime } = req.body || {};
+        scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
+        signageEnabled, signageUrls, signageIntervalSeconds } = req.body || {};
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
@@ -93,6 +97,30 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
       if (!v.ok) return res.status(400).json({ error: v.error });
     }
     scheduleValues = { enabled: enabled ? 1 : 0, openTime: openTime || null, closeTime: closeTime || null };
+  }
+
+  // KIOSK_BUILD.md §9 "מצב תצוגה": same conditional-validation shape as
+  // scheduleValues above — only checked when the caller actually touches one
+  // of the three signage fields, re-validated against whichever playlist/
+  // interval ends up in effect (new value if sent, else the device's
+  // existing one) so `signageEnabled=true` alone, reusing a playlist saved
+  // earlier, still gets checked.
+  let signageValues = null;
+  if (signageEnabled !== undefined || signageUrls !== undefined || signageIntervalSeconds !== undefined) {
+    const enabled = !!signageEnabled;
+    const urls = signageUrls !== undefined ? signageUrls : device.signage_urls;
+    const intervalSeconds = signageIntervalSeconds !== undefined ? signageIntervalSeconds : device.signage_interval_seconds;
+    let urlsValue = urls || null;
+    let intervalValue = intervalSeconds;
+    if (enabled) {
+      const v = validateSignagePlaylist(urls);
+      if (!v.ok) return res.status(400).json({ error: v.error });
+      const vi = validateSignageInterval(intervalSeconds);
+      if (!vi.ok) return res.status(400).json({ error: vi.error });
+      urlsValue = v.urls.join('\n');
+      intervalValue = vi.seconds;
+    }
+    signageValues = { enabled: enabled ? 1 : 0, urls: urlsValue, intervalSeconds: intervalValue };
   }
 
   // Selecting a link from the library overrides the URL + host set.
@@ -134,7 +162,9 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
      exit_code = COALESCE(?, exit_code), display_zoom_percent = COALESCE(?, display_zoom_percent),
      schedule_enabled = COALESCE(?, schedule_enabled), schedule_open_time = COALESCE(?, schedule_open_time),
      schedule_close_time = COALESCE(?, schedule_close_time),
-     schedule_last_state = CASE WHEN ? = 1 THEN NULL ELSE schedule_last_state END WHERE id = ?`)
+     schedule_last_state = CASE WHEN ? = 1 THEN NULL ELSE schedule_last_state END,
+     signage_enabled = COALESCE(?, signage_enabled), signage_urls = COALESCE(?, signage_urls),
+     signage_interval_seconds = COALESCE(?, signage_interval_seconds) WHERE id = ?`)
     .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
          exitCodeValue,
@@ -143,6 +173,9 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
          scheduleValues ? scheduleValues.openTime : null,
          scheduleValues ? scheduleValues.closeTime : null,
          scheduleValues ? 1 : 0,
+         signageValues ? signageValues.enabled : null,
+         signageValues ? signageValues.urls : null,
+         signageValues ? signageValues.intervalSeconds : null,
          device.id);
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   logEvent(device.id, req.user.id, 'config_update', null);
@@ -281,6 +314,8 @@ function publicDevice(d) {
     displayZoomPercent: d.display_zoom_percent ?? 100,
     scheduleEnabled: !!d.schedule_enabled, scheduleOpenTime: d.schedule_open_time || '',
     scheduleCloseTime: d.schedule_close_time || '',
+    signageEnabled: !!d.signage_enabled, signageUrls: d.signage_urls || '',
+    signageIntervalSeconds: d.signage_interval_seconds ?? 15,
   };
 }
 

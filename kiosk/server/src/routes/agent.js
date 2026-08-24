@@ -100,6 +100,8 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       // once the owner approves some in the console) travels here too rather
       // than needing a separate online lookup before it can be shown.
       approvedClients: approvedClientsForDevice(device.id),
+      signageEnabled: !!device.signage_enabled, signageUrls: device.signage_urls || '',
+      signageIntervalSeconds: device.signage_interval_seconds,
     },
   });
 });
@@ -135,6 +137,8 @@ router.post('/heartbeat', (req, res) => {
       name: fresh.name, idleReturnSeconds: fresh.idle_return_seconds,
       adminCode: fresh.exit_code || '', displayZoomPercent: fresh.display_zoom_percent,
       approvedClients: approvedClientsForDevice(fresh.id),
+      signageEnabled: !!fresh.signage_enabled, signageUrls: fresh.signage_urls || '',
+      signageIntervalSeconds: fresh.signage_interval_seconds,
     },
     commands,
   });

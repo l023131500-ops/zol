@@ -169,6 +169,14 @@ ensureColumn('devices', 'schedule_enabled', 'schedule_enabled INTEGER NOT NULL D
 ensureColumn('devices', 'schedule_open_time', 'schedule_open_time TEXT');
 ensureColumn('devices', 'schedule_close_time', 'schedule_close_time TEXT');
 ensureColumn('devices', 'schedule_last_state', 'schedule_last_state TEXT');
+// KIOSK_BUILD.md §9 "מצב תצוגה (Digital Signage)": idle content rotation.
+// 0/NULL on every existing row, same "never configured" convention as
+// schedule_*/exit_code above. signage_urls is newline-separated (not CSV —
+// URLs can contain commas in their own query strings), matching exactly what
+// the console's playlist textarea holds.
+ensureColumn('devices', 'signage_enabled', 'signage_enabled INTEGER NOT NULL DEFAULT 0');
+ensureColumn('devices', 'signage_urls', 'signage_urls TEXT');
+ensureColumn('devices', 'signage_interval_seconds', 'signage_interval_seconds INTEGER NOT NULL DEFAULT 15');
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(
