@@ -50,6 +50,14 @@ export const config = {
   jwtSecret: required('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'dev-insecure-secret'),
   dbPath: path.resolve(root, process.env.DB_PATH || './data/kioskfleet.db'),
   offlineAfterMinutes: Number(process.env.OFFLINE_AFTER_MINUTES || 3),
+  // KIOSK_BUILD.md §9 "התראות": thresholds for the alerts the console surfaces.
+  // Deliberately a separate, longer window than offlineAfterMinutes above —
+  // that one marks a device offline the moment its heartbeat lapses (a normal,
+  // frequent blip on a venue's wifi); this one is "offline long enough that an
+  // owner should actually go check on it".
+  alertOfflineMinutes: Number(process.env.ALERT_OFFLINE_MINUTES || 15),
+  lowBatteryPercent: Number(process.env.LOW_BATTERY_PERCENT || 15),
+  exitAttemptWindowHours: Number(process.env.EXIT_ATTEMPT_WINDOW_HOURS || 24),
   seedAdminUser: process.env.SEED_ADMIN_USER || 'admin',
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || 'admin1234',
   isProd: process.env.NODE_ENV === 'production',

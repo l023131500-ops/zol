@@ -611,7 +611,16 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         AlertDialog.Builder(this).setTitle("תחזוקה").setView(input)
-            .setPositiveButton("כניסה") { _, _ -> if (input.text.toString() == code) onUnlock(10) else toast("קוד שגוי") }
+            .setPositiveButton("כניסה") { _, _ ->
+                // KIOSK_BUILD.md §9 "ניסיון יציאה מהקיוסק": every submission of
+                // this dialog is reported, not only wrong ones — the owner-side
+                // alert list (routes/alerts.js) is the one that decides which
+                // reports are alert-worthy; the device just tells the truth
+                // about what happened here.
+                val ok = input.text.toString() == code
+                if (::agent.isInitialized) agent.reportExitAttempt(ok)
+                if (ok) onUnlock(10) else toast("קוד שגוי")
+            }
             .setNegativeButton("ביטול", null).show()
     }
 

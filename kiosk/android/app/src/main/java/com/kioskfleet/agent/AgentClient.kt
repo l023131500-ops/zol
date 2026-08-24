@@ -307,6 +307,30 @@ class AgentClient(
         }.start()
     }
 
+    /**
+     * KIOSK_BUILD.md §9 "ניסיון יציאה מהקיוסק": showAdminDialog() compares the
+     * typed maintenance code entirely on-device (Prefs.ADMIN_CODE, no network
+     * call at all) — nothing about that dialog ever reached the server before
+     * this. Fire-and-forget, same shape as ack()'s HTTP fallback: a report
+     * that fails to reach the server is a missed alert, not a broken kiosk,
+     * so it must never block or retry into the corner-tap gesture the
+     * customer is standing in front of.
+     */
+    fun reportExitAttempt(ok: Boolean) {
+        Thread {
+            try {
+                val conn = (URL("$server/api/agent/exit-attempt").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("X-Device-Token", token)
+                    connectTimeout = 8000; readTimeout = 8000
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(JSONObject().put("ok", ok).toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }.start()
+    }
+
     private fun batteryLevel(): Int {
         val bm = ctx.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager ?: return -1
         return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)

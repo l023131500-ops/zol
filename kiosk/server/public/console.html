@@ -67,6 +67,15 @@
     }
     .side nav button[data-view]:hover { background: rgba(255,255,255,.06); color: #fff; }
     .side nav button[data-view].active { background: var(--accent); color: #fff; }
+    /* KIOSK_BUILD.md §9 "התראות". .hidden (display:none !important) hides it
+       when the count is 0, same convention "ניהול-על" above already uses for
+       "not applicable right now" rather than "not built yet". */
+    .side nav button[data-view] .badge {
+      margin-inline-start: auto; background: #dc2626; color: #fff;
+      border-radius: 999px; font-size: 11px; font-weight: 700;
+      min-width: 18px; height: 18px; padding: 0 5px;
+      display: flex; align-items: center; justify-content: center;
+    }
     /* הסרגל כהה, ולכן טבעת המיקוד לבנה ולא בצבע ההדגשה. */
     .side nav button[data-view]:focus-visible,
     .side .userbox #logout-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
@@ -141,6 +150,7 @@
         <button type="button" data-view="links">🔗 ספריית קישורים</button>
         <button type="button" data-view="clients">👥 לקוחות</button>
         <button type="button" data-view="templates">🧩 תבניות</button>
+        <button type="button" data-view="alerts">🔔 התראות<span id="alerts-badge" class="badge hidden"></span></button>
         <button type="button" data-view="enroll">➕ הוספת מכשיר</button>
         <button type="button" data-view="guide">📖 הוראות הפעלה</button>
         <button type="button" data-view="admin" id="menu-admin" class="hidden">👑 ניהול-על</button>

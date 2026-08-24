@@ -4,6 +4,7 @@ import { customAlphabet } from 'nanoid';
 import { db, logEvent, approvedClientsForDevice } from '../db.js';
 import { notifyConsolesOfDevice } from '../hub.js';
 import { normalizeClientCode } from '../clients.js';
+import { validateExitAttemptBody } from '../alerts.js';
 
 // Device-facing API. Auth is by device_token (issued at enrollment), NOT by JWT.
 const router = express.Router();
@@ -216,6 +217,26 @@ router.post('/ack', (req, res) => {
   db.prepare("UPDATE commands SET status = ?, result = ?, done_at = datetime('now') WHERE id = ? AND device_id = ?")
     .run(ok ? 'done' : 'failed', result ? String(result).slice(0, 2000) : null, commandId, device.id);
   logEvent(device.id, null, 'command_ack', `#${commandId} ${ok ? 'done' : 'failed'}`);
+  res.json({ ok: true });
+});
+
+/**
+ * POST /api/agent/exit-attempt
+ * Header: X-Device-Token. Body: { ok: boolean }
+ * KIOSK_BUILD.md §9 "ניסיון יציאה מהקיוסק": showAdminDialog() on the device
+ * compares the typed maintenance code entirely locally (exitcode.js's own
+ * header comment) — nothing about that dialog being opened, or a wrong code
+ * being typed into it, ever reached the server before this. `ok` is exactly
+ * what the device's own comparison decided, not re-derived here: the server
+ * never receives the code itself, so a wrong-code attempt is reported, not
+ * re-validated.
+ */
+router.post('/exit-attempt', (req, res) => {
+  const device = deviceFromToken(req);
+  if (!device) return res.status(401).json({ error: 'device token invalid' });
+  const { valid, ok, error } = validateExitAttemptBody(req.body);
+  if (!valid) return res.status(400).json({ error });
+  logEvent(device.id, null, 'exit_attempt', ok ? 'correct_code' : 'wrong_code');
   res.json({ ok: true });
 });
 

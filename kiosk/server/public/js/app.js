@@ -213,6 +213,12 @@ async function boot() {
   try { WS_HOST = (await api('/config')).wsHost || null; } catch { WS_HOST = null; }
   connectSocket();
   route('devices');
+  // Alerts (KIOSK_BUILD.md §9) have no realtime push of their own — unlike
+  // devices, nothing today calls notifyConsolesOfDevice() when an alert
+  // condition starts or clears — so the badge is refreshed on its own timer,
+  // independent of the device socket/poll fallback above.
+  refreshAlertsBadge();
+  setInterval(refreshAlertsBadge, 60000);
 }
 
 // ── realtime ────────────────────────────────────────────────────
@@ -305,7 +311,7 @@ $('#menu').addEventListener('click', (e) => {
 function route(view) {
   CURRENT = view;
   [...$('#menu').children].forEach((a) => a.classList.toggle('active', a.dataset.view === view));
-  ({ devices: viewDevices, links: viewLinks, clients: viewClients, templates: viewTemplates, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
+  ({ devices: viewDevices, links: viewLinks, clients: viewClients, templates: viewTemplates, alerts: viewAlerts, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
 }
 
 // Cache of the customer's link library (used by enroll + edit selectors).
@@ -857,6 +863,70 @@ async function applyTemplateModal(t) {
     } catch (e) { toast(e.message, false); }
     finally { btn.disabled = false; }
   };
+}
+
+// ── ALERTS (KIOSK_BUILD.md §9 "התראות: מכשיר אופליין מעל X, סוללה נמוכה,
+// ניסיון יציאה מהקיוסק") ────────────────────────────────────────
+async function refreshAlertsBadge() {
+  const badge = $('#alerts-badge'); if (!badge || !TOKEN) return;
+  try {
+    const { summary } = await api('/alerts' + (ME && ME.role === 'admin' ? '?all=1' : ''));
+    badge.textContent = summary.total > 99 ? '99+' : String(summary.total);
+    badge.classList.toggle('hidden', summary.total === 0);
+  } catch { /* a failed refresh leaves the last-known badge on screen */ }
+}
+
+function formatAlertTime(iso) {
+  // SQLite's datetime('now') has no timezone suffix and is UTC — without the
+  // 'Z' the browser would parse it as *local* time, misreading it by the
+  // viewer's own UTC offset (e.g. an event minutes old showing hours in the
+  // future). devicepayload.js's own timestamps carry a real 'Z'/offset (they
+  // pass straight through from column values written elsewhere); events'
+  // created_at is the one raw `datetime('now')` string reaching the client.
+  const withZone = /[zZ]|[+-]\d\d:\d\d$/.test(iso) ? iso : iso.replace(' ', 'T') + 'Z';
+  return new Date(withZone).toLocaleString('he-IL');
+}
+
+async function viewAlerts() {
+  $('#content').innerHTML = `<div class="topbar"><h1>התראות</h1>
+    <button class="btn btn-light btn-sm" id="alerts-refresh">רענון</button></div>
+    <div id="alerts-body"><p style="color:var(--muted)">טוען…</p></div>`;
+  $('#alerts-refresh').onclick = loadAlerts;
+  await loadAlerts();
+}
+
+async function loadAlerts() {
+  let data;
+  try { data = await api('/alerts' + (ME.role === 'admin' ? '?all=1' : '')); }
+  catch (e) { toast(e.message, false); return; }
+  refreshAlertsBadge();
+  const { offlineDevices, lowBatteryDevices, exitAttempts, thresholds } = data;
+  const box = $('#alerts-body'); if (!box) return;
+
+  const offlineHtml = !offlineDevices.length
+    ? `<p style="color:var(--muted);margin:0">אין מכשירים אופליין מעל ${thresholds.offlineMinutes} דקות.</p>`
+    : `<table><tr><th>מכשיר</th><th>מספר סידורי</th><th>נראה לאחרונה</th></tr>${offlineDevices.map((d) =>
+        `<tr><td><b>${esc(d.name)}</b></td><td dir="ltr">${esc(d.serial)}</td><td>${d.last_seen ? formatAlertTime(d.last_seen) : 'מעולם לא'}</td></tr>`
+      ).join('')}</table>`;
+
+  const batteryHtml = !lowBatteryDevices.length
+    ? `<p style="color:var(--muted);margin:0">אין מכשירים עם סוללה מתחת ל-${thresholds.lowBatteryPercent}%.</p>`
+    : `<table><tr><th>מכשיר</th><th>מספר סידורי</th><th>סוללה</th></tr>${lowBatteryDevices.map((d) =>
+        `<tr><td><b>${esc(d.name)}</b></td><td dir="ltr">${esc(d.serial)}</td><td>🔋 ${d.battery}%</td></tr>`
+      ).join('')}</table>`;
+
+  const exitHtml = !exitAttempts.length
+    ? `<p style="color:var(--muted);margin:0">אין ניסיונות יציאה ב-${thresholds.exitAttemptWindowHours} השעות האחרונות.</p>`
+    : `<table><tr><th>מכשיר</th><th>תוצאה</th><th>זמן</th></tr>${exitAttempts.map((e) =>
+        `<tr><td><b>${esc(e.device_name)}</b> <span style="color:var(--muted);font-size:12px" dir="ltr">${esc(e.device_serial)}</span></td>
+         <td>${e.detail === 'wrong_code' ? '⚠️ קוד שגוי' : '✅ קוד נכון'}</td>
+         <td>${formatAlertTime(e.created_at)}</td></tr>`
+      ).join('')}</table>`;
+
+  box.innerHTML = `
+    <div class="card"><h3>📡 מכשירים אופליין (מעל ${thresholds.offlineMinutes} דקות)</h3>${offlineHtml}</div>
+    <div class="card"><h3>🔋 סוללה נמוכה (מתחת ל-${thresholds.lowBatteryPercent}%)</h3>${batteryHtml}</div>
+    <div class="card"><h3>🚪 ניסיונות יציאה מהקיוסק (${thresholds.exitAttemptWindowHours} שעות אחרונות)</h3>${exitHtml}</div>`;
 }
 
 // ── SETTINGS ────────────────────────────────────────────────────
