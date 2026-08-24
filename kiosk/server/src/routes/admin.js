@@ -1,6 +1,7 @@
 import express from 'express';
 import { db, logEvent } from '../db.js';
 import { requireAdmin, hashPassword } from '../auth.js';
+import { disconnectConsole } from '../hub.js';
 
 // Super-admin only. Manage customer accounts and see the whole fleet.
 const router = express.Router();
@@ -40,6 +41,11 @@ router.patch('/users/:id', requireAdmin, (req, res) => {
     .run(fullName ?? null, deviceLimit != null ? Math.max(1, Number(deviceLimit)) : null,
          active != null ? (active ? 1 : 0) : null,
          role ? (role === 'admin' ? 'admin' : 'user') : null, user.id);
+  // A deactivation must also end any console socket this user already has
+  // open — otherwise it keeps streaming their own device_update frames for
+  // the rest of the JWT's life, the exact gap hub.js's /ws/console connect
+  // check exists to close for a *new* socket.
+  if (active != null && !active) disconnectConsole(user.id);
   logEvent(null, req.user.id, 'user_updated', user.username);
   res.json({ user: db.prepare('SELECT id, username, full_name, role, device_limit, active FROM users WHERE id = ?').get(user.id) });
 });
@@ -59,6 +65,7 @@ router.delete('/users/:id', requireAdmin, (req, res) => {
   if (!user) return res.sendStatus(404);
   if (user.id === req.user.id) return res.status(400).json({ error: 'לא ניתן למחוק את החשבון שלך' });
   db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+  disconnectConsole(user.id);
   logEvent(null, req.user.id, 'user_deleted', user.username);
   res.json({ ok: true });
 });

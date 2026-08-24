@@ -31,6 +31,23 @@ export function pushCommandToAgent(deviceId, command) {
   return false;
 }
 
+// Force-close every open console socket for a user whose account was just
+// deactivated or deleted. The connect-time active check below stops a *new*
+// socket from opening on a still-valid token, but does nothing about one that
+// was already open before the change landed — it would otherwise keep
+// streaming that user's own device_update frames for the rest of the JWT's
+// 12h life. Called from admin.js right after the same UPDATE/DELETE that
+// flips `active`.
+export function disconnectConsole(userId) {
+  const set = consoles.get(userId);
+  if (!set) return;
+  for (const ws of set) {
+    send(ws, { type: 'error', error: 'session ended' });
+    ws.close();
+  }
+  consoles.delete(userId);
+}
+
 // Notify all dashboards that may care about this device (owner + every admin).
 export function notifyConsolesOfDevice(device, payload) {
   const targets = new Set();
@@ -107,7 +124,15 @@ export function attachHub(server) {
 
     if (url.pathname === '/ws/console') {
       const decoded = token ? verifyToken(token) : null;
-      if (!decoded) { send(ws, { type: 'error', error: 'invalid token' }); return ws.close(); }
+      // requireAuth (every REST route) re-checks `active = 1` against the DB on
+      // every request, so deactivating a user cuts off the dashboard within one
+      // request. This handler used to stop at the JWT's own signature/expiry —
+      // a token issued before deactivation (valid up to 12h, per signToken)
+      // could still open a *new* console socket. Same live check requireAuth
+      // uses. disconnectConsole() below (called from admin.js) closes the
+      // matching gap for a socket that was already open when the change landed.
+      const user = decoded ? db.prepare('SELECT id FROM users WHERE id = ? AND active = 1').get(decoded.uid) : null;
+      if (!user) { send(ws, { type: 'error', error: 'invalid token' }); return ws.close(); }
       const set = consoles.get(decoded.uid) || new Set();
       set.add(ws);
       consoles.set(decoded.uid, set);
