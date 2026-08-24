@@ -99,8 +99,34 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         if (venue.isNotEmpty()) {
             activeClientCode = null
             allowedHosts = deviceAllowedHosts
+            clearBrowsingSession()
             webView.loadUrl(venue)
+            webView.clearHistory()
         }
+    }
+
+    /**
+     * KIOSK_BUILD.md §9: "ניקוי סשן: מחיקת היסטוריה/עוגיות בין משתמשים (קריטי
+     * לקיוסק ציבורי)" — a public kiosk must not carry one customer's cookies,
+     * localStorage, form autofill or back-stack into the next. Cookies are
+     * cleared here (`onClearCache()` above never touched `CookieManager` —
+     * only cache + DOM storage, and only on an explicit remote command).
+     *
+     * Called only at an actual "a different person is now at the device"
+     * boundary — idle-return, and an operator's own tap away from the
+     * current home/client — never mid-session, or a customer mid-form would
+     * lose their own input. Deliberately *not* called from `onCreate()`'s
+     * boot/restart path: that path's `LAST_URL` restore is an intentional
+     * "resume where the device left off" feature (crash/OTA/`reboot`
+     * command, not necessarily a new customer), and wiping cookies there
+     * would fight that restore rather than serve §9's "between users" goal.
+     */
+    private fun clearBrowsingSession() {
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+        webView.clearFormData()
+        WebStorage.getInstance().deleteAllData()
+        webView.clearCache(true)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -406,7 +432,9 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         activeClientCode = null
         allowedHosts = deviceAllowedHosts
         val venue = safeStoredUrl(Prefs.get(this, Prefs.HOME_URL), deviceAllowedHosts)
+        clearBrowsingSession()
         webView.loadUrl(venue.ifEmpty { "about:blank" })
+        webView.clearHistory()
         resetIdleTimer()
     }
 
@@ -431,7 +459,9 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         if (hosts.isEmpty() || !hostAllowed(host, hosts)) { toast("קישור הלקוח חסום או לא תקין"); return }
         activeClientCode = client.optString("code")
         allowedHosts = hosts
+        clearBrowsingSession()
         webView.loadUrl(url)
+        webView.clearHistory()
         resetIdleTimer()
     }
 
