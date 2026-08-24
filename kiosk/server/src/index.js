@@ -12,6 +12,7 @@ import authRoutes from './routes/auth.js';
 import deviceRoutes from './routes/devices.js';
 import linkRoutes from './routes/links.js';
 import clientRoutes from './routes/clients.js';
+import templateRoutes from './routes/templates.js';
 import adminRoutes from './routes/admin.js';
 import agentRoutes from './routes/agent.js';
 import { issueCommand } from './commands.js';
@@ -107,6 +108,7 @@ site.use('/api/auth', authRoutes);
 site.use('/api', deviceRoutes);
 site.use('/api', linkRoutes);
 site.use('/api', clientRoutes);
+site.use('/api', templateRoutes);
 site.use('/api/admin', adminRoutes);
 site.use('/api/agent', agentRoutes);
 

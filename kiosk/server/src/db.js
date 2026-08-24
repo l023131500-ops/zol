@@ -128,12 +128,41 @@ CREATE TABLE IF NOT EXISTS device_clients (
   PRIMARY KEY (device_id, client_id)
 );
 
+-- KIOSK_BUILD.md §8 "קבוצות/תבניות: להחיל מדיניות על קבוצת מכשירים בבת אחת".
+-- A saved policy (subset of the same fields devices.allowed_host/home_url/
+-- idle_return_seconds/exit_code/display_zoom_percent/schedule_*/signage_*
+-- already hold) an owner can apply to many devices in one action. Every
+-- policy column is nullable and independent of the others — NULL means "not
+-- part of this template", the same "never configured" convention exit_code
+-- established on devices itself, not "set to empty/off". See
+-- src/templatepolicy.js for the field-by-field validation this table's rows
+-- are built from.
+CREATE TABLE IF NOT EXISTS templates (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  home_url      TEXT,
+  allowed_host  TEXT,
+  idle_return_seconds INTEGER,
+  exit_code     TEXT,
+  display_zoom_percent INTEGER,
+  schedule_enabled INTEGER,
+  schedule_open_time TEXT,
+  schedule_close_time TEXT,
+  signage_enabled INTEGER,
+  signage_urls TEXT,
+  signage_interval_seconds INTEGER,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(owner_id, name)
+);
+
 CREATE INDEX IF NOT EXISTS idx_devices_owner ON devices(owner_id);
 CREATE INDEX IF NOT EXISTS idx_commands_device ON commands(device_id, status);
 CREATE INDEX IF NOT EXISTS idx_events_device ON events(device_id);
 CREATE INDEX IF NOT EXISTS idx_links_owner ON links(owner_id);
 CREATE INDEX IF NOT EXISTS idx_clients_owner ON clients(owner_id);
 CREATE INDEX IF NOT EXISTS idx_device_clients_device ON device_clients(device_id);
+CREATE INDEX IF NOT EXISTS idx_templates_owner ON templates(owner_id);
 `);
 
 // ── Lightweight migrations for databases created by earlier versions ──

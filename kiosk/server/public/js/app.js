@@ -305,7 +305,7 @@ $('#menu').addEventListener('click', (e) => {
 function route(view) {
   CURRENT = view;
   [...$('#menu').children].forEach((a) => a.classList.toggle('active', a.dataset.view === view));
-  ({ devices: viewDevices, links: viewLinks, clients: viewClients, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
+  ({ devices: viewDevices, links: viewLinks, clients: viewClients, templates: viewTemplates, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
 }
 
 // Cache of the customer's link library (used by enroll + edit selectors).
@@ -372,6 +372,7 @@ const EVENT_LABELS = {
   command: 'פקודה נשלחה', command_ack: 'תגובת מכשיר לפקודה', connected: 'המכשיר התחבר',
   enrolled: 'המכשיר נרשם', config_update: 'הגדרות עודכנו', screenshot: 'צילום מסך נלכד',
   client_identified: 'זוהה לקוח במכשיר', client_approved: 'לקוח אושר למכשיר', client_revoked: 'אישור לקוח בוטל',
+  template_applied: 'תבנית הוחלה על המכשיר',
 };
 const COMMAND_LABELS = {
   reboot: 'אתחול', reload: 'רענון', set_url: 'החלפת כתובת', screen_on: 'הדלקת מסך', screen_off: 'כיבוי מסך',
@@ -718,6 +719,141 @@ function clientModal(c) {
         }),
       });
       toast('הלקוח עודכן'); m.remove(); loadClients();
+    } catch (e) { toast(e.message, false); }
+    finally { btn.disabled = false; }
+  };
+}
+
+// ── TEMPLATES (KIOSK_BUILD.md §8 "קבוצות/תבניות: להחיל מדיניות על קבוצת
+// מכשירים בבת אחת") ────────────────────────────────────────────────
+//
+// A saved policy, applied to any number of devices in one action, instead of
+// opening editDevice() for each one to repeat the same allow-list/schedule/
+// signage/zoom change. Each field group is opt-in via its own checkbox —
+// unchecked means "not part of this template", matching the server's own
+// "NULL = not part of this template" convention (routes/templates.js /
+// templatepolicy.js), so a template can add a business-hours schedule to a
+// fleet without also silently overwriting every device's own home URL.
+async function viewTemplates() {
+  $('#content').innerHTML = `<div class="topbar"><h1>תבניות</h1></div>
+    <p style="color:var(--muted);max-width:680px">שמרו כאן מדיניות (דומיינים מותרים, שעות פעילות, תצוגה, זום, קוד תחזוקה) והחילו אותה על כמה מכשירים בבת אחת. כל שדה מוחל רק אם סימנתם אותו — שדה לא-מסומן נשאר כפי שהיה בכל מכשיר.</p>
+    <div class="card" style="max-width:680px">
+      <h3>תבנית חדשה</h3>
+      <div class="field"><label>שם התבנית</label><input id="tpl-name" placeholder="למשל: שעות פעילות אולם" /></div>
+      <div class="field"><label>קישור ראשי (אופציונלי)</label><input id="tpl-url" placeholder="https://example.com" dir="ltr" /></div>
+      <div class="field"><label>דומיינים נוספים מותרים (אופציונלי)</label><div id="tpl-hl"></div></div>
+      <div class="field"><label>חזרה אוטומטית לקישור (שניות; ריק = לא לכלול)</label><input id="tpl-idle" type="number" min="0" placeholder="לא לכלול" dir="ltr" /></div>
+      <div class="field"><label><input id="tpl-zoom-on" type="checkbox" /> כלול הגדלת תצוגה (זום): <span id="tpl-zoom-val">100%</span></label>
+        <input id="tpl-zoom" type="range" min="50" max="300" step="10" value="100" disabled dir="ltr" /></div>
+      <div class="field"><label><input id="tpl-sched-on" type="checkbox" /> כלול תזמון שעות פעילות בתבנית</label>
+        <div id="tpl-sched-fields" style="display:none;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px"><input id="tpl-sched-enabled" type="checkbox" checked /> מופעל (לא מסומן = כיבוי התזמון בכל מכשיר שהתבנית תוחל עליו)</label>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <div style="flex:1"><label style="font-size:12px">שעת פתיחה</label><input id="tpl-sched-open" type="time" value="09:00" dir="ltr" /></div>
+            <div style="flex:1"><label style="font-size:12px">שעת סגירה</label><input id="tpl-sched-close" type="time" value="21:00" dir="ltr" /></div>
+          </div>
+        </div></div>
+      <div class="field"><label><input id="tpl-sig-on" type="checkbox" /> כלול מצב תצוגה בתבנית</label>
+        <div id="tpl-sig-fields" style="display:none;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px"><input id="tpl-sig-enabled" type="checkbox" checked /> מופעל (לא מסומן = כיבוי מצב התצוגה בכל מכשיר שהתבנית תוחל עליו)</label>
+          <div style="margin-top:8px"><label style="font-size:12px">קישורי תצוגה (אחד בכל שורה)</label>
+            <textarea id="tpl-sig-urls" style="width:100%;height:70px;font-family:monospace;font-size:12px" dir="ltr" placeholder="https://example.com/promo1&#10;https://example.com/promo2"></textarea></div>
+          <div style="max-width:200px;margin-top:6px"><label style="font-size:12px">זמן החלפה (שניות)</label>
+            <input id="tpl-sig-interval" type="number" min="3" max="3600" value="15" dir="ltr" /></div>
+        </div></div>
+      <div class="field"><label>קוד תחזוקה מקומי (אופציונלי; ריק = לא לכלול)</label><input id="tpl-exit" placeholder="לא לכלול" dir="ltr" /></div>
+      <button class="btn btn-primary" id="tpl-create">שמור תבנית</button>
+    </div>
+    <div class="card" style="max-width:680px"><h3>התבניות שלי</h3><div id="tpl-list">טוען…</div></div>`;
+  const tplHl = hostListEditor($('#tpl-hl'), '', '');
+  $('#tpl-zoom-on').onchange = (e) => { $('#tpl-zoom').disabled = !e.target.checked; };
+  $('#tpl-zoom').oninput = (e) => { $('#tpl-zoom-val').textContent = `${e.target.value}%`; };
+  $('#tpl-sched-on').onchange = (e) => { $('#tpl-sched-fields').style.display = e.target.checked ? 'block' : 'none'; };
+  $('#tpl-sig-on').onchange = (e) => { $('#tpl-sig-fields').style.display = e.target.checked ? 'block' : 'none'; };
+
+  $('#tpl-create').onclick = async () => {
+    const name = $('#tpl-name').value.trim();
+    if (!name) return toast('נא למלא שם לתבנית', false);
+    const body = { name };
+    const url = $('#tpl-url').value.trim(); if (url) body.homeUrl = url;
+    const allowedHost = tplHl.value(); if (allowedHost) body.allowedHost = allowedHost;
+    const idle = $('#tpl-idle').value; if (idle !== '') body.idleReturnSeconds = Number(idle);
+    const exitCode = $('#tpl-exit').value.trim(); if (exitCode) body.exitCode = exitCode;
+    if ($('#tpl-zoom-on').checked) body.displayZoomPercent = Number($('#tpl-zoom').value);
+    if ($('#tpl-sched-on').checked) {
+      body.scheduleEnabled = $('#tpl-sched-enabled').checked;
+      body.scheduleOpenTime = $('#tpl-sched-open').value;
+      body.scheduleCloseTime = $('#tpl-sched-close').value;
+    }
+    if ($('#tpl-sig-on').checked) {
+      body.signageEnabled = $('#tpl-sig-enabled').checked;
+      body.signageUrls = $('#tpl-sig-urls').value;
+      body.signageIntervalSeconds = Number($('#tpl-sig-interval').value);
+    }
+    const btn = $('#tpl-create');
+    btn.disabled = true;
+    try { await api('/templates', { method: 'POST', body: JSON.stringify(body) }); toast('התבנית נשמרה'); viewTemplates(); }
+    catch (e) { toast(e.message, false); }
+    finally { btn.disabled = false; }
+  };
+  loadTemplates();
+}
+
+/** A short, human-readable summary of what a template actually sets, for the list table. */
+function templateSummary(t) {
+  const parts = [];
+  if (t.homeUrl) parts.push('קישור ראשי');
+  if (t.allowedHost) parts.push('דומיינים מותרים');
+  if (t.idleReturnSeconds != null) parts.push('חזרה אוטומטית');
+  if (t.exitCode != null) parts.push('קוד תחזוקה');
+  if (t.displayZoomPercent != null) parts.push(`זום ${t.displayZoomPercent}%`);
+  if (t.scheduleEnabled != null) parts.push(t.scheduleEnabled ? `שעות ${t.scheduleOpenTime}–${t.scheduleCloseTime}` : 'כיבוי תזמון');
+  if (t.signageEnabled != null) parts.push(t.signageEnabled ? 'מצב תצוגה' : 'כיבוי תצוגה');
+  return parts.length ? parts.join(' · ') : 'תבנית ריקה';
+}
+
+async function loadTemplates() {
+  let templates;
+  try { ({ templates } = await api('/templates')); } catch (e) { toast(e.message, false); templates = []; }
+  const box = $('#tpl-list'); if (!box) return;
+  if (!templates.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין עדיין תבניות.</p>'; return; }
+  box.innerHTML = '<table><tr><th>שם</th><th>כולל</th><th></th></tr>' +
+    templates.map((t) => `<tr><td><b>${esc(t.name)}</b></td>
+      <td style="font-size:12px;color:var(--muted)">${esc(templateSummary(t))}</td>
+      <td><button class="btn btn-primary btn-sm" data-apply="${t.id}">החלה על מכשירים</button>
+      <button class="btn btn-danger btn-sm" data-del="${t.id}">מחק</button></td></tr>`).join('') + '</table>';
+  box.querySelectorAll('[data-apply]').forEach((b) => b.onclick = () => {
+    const t = templates.find((x) => x.id == b.dataset.apply); applyTemplateModal(t);
+  });
+  box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    try { await api('/templates/' + b.dataset.del, { method: 'DELETE' }); loadTemplates(); }
+    catch (e) { toast(e.message, false); }
+  });
+}
+
+/** Device-picker modal for POST /templates/:id/apply — a fresh device list, not the (possibly stale) devices-view cache. */
+async function applyTemplateModal(t) {
+  const m = modal(`<h3>החלת "${esc(t.name)}" על מכשירים</h3>
+    <p style="color:var(--muted);font-size:13px">${esc(templateSummary(t))}</p>
+    <div id="apply-dev-list" style="max-height:320px;overflow:auto">טוען…</div>
+    <div class="row" style="margin-top:10px"><button class="btn btn-primary" id="apply-go">החל על הנבחרים</button><button class="btn btn-light" id="apply-cancel">ביטול</button></div>`);
+  $('#apply-cancel', m).onclick = () => m.remove();
+  let devices = [];
+  try { ({ devices } = await api('/devices' + (ME.role === 'admin' ? '?all=1' : ''))); } catch (e) { toast(e.message, false); }
+  const list = $('#apply-dev-list', m);
+  if (!devices.length) { list.innerHTML = '<p style="color:var(--muted);margin:0">אין מכשירים.</p>'; return; }
+  list.innerHTML = devices.map((d) => `<label style="display:flex;align-items:center;gap:8px;padding:4px 0">
+    <input type="checkbox" data-dev="${d.id}" />
+    <span class="dot ${d.online ? 'on' : 'off'}"></span> ${esc(d.name)} <span style="color:var(--muted);font-size:12px">S/N ${esc(d.serial)}</span></label>`).join('');
+  $('#apply-go', m).onclick = async () => {
+    const deviceIds = [...list.querySelectorAll('[data-dev]:checked')].map((cb) => Number(cb.dataset.dev));
+    if (!deviceIds.length) return toast('בחרו לפחות מכשיר אחד', false);
+    const btn = $('#apply-go', m);
+    btn.disabled = true;
+    try {
+      const { applied, skipped } = await api(`/templates/${t.id}/apply`, { method: 'POST', body: JSON.stringify({ deviceIds }) });
+      toast(skipped.length ? `הוחל על ${applied.length} מכשירים, ${skipped.length} דולגו` : `הוחל על ${applied.length} מכשירים`);
+      m.remove(); if (CURRENT === 'devices') loadDevices();
     } catch (e) { toast(e.message, false); }
     finally { btn.disabled = false; }
   };
