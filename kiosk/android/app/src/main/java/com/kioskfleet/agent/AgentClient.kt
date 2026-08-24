@@ -27,7 +27,7 @@ interface CommandHandler {
     fun onLock()
     fun onUnlock(minutes: Int)
     fun onMessage(text: String)
-    fun onConfigUpdated(homeUrl: String, allowedHost: String, idleReturnSeconds: Int)
+    fun onConfigUpdated(homeUrl: String, allowedHost: String, idleReturnSeconds: Int, displayZoomPercent: Int)
     fun onScreenshot(commandId: Long)
 }
 
@@ -132,17 +132,28 @@ class AgentClient(
                 // Independent of the homeUrl gate below: the maintenance code
                 // has to keep landing even on a heartbeat that carries no new
                 // home link, or a code set after enrollment never reaches a
-                // device whose home link never changes again.
+                // device whose home link never changes again. Zoom is the
+                // same shape — an owner adjusting only the zoom slider must
+                // not need a home-link change to ride along before it takes
+                // effect on screen.
                 val adminCode = cfg.optString("adminCode", Prefs.get(ctx, Prefs.ADMIN_CODE))
                 if (adminCode != Prefs.get(ctx, Prefs.ADMIN_CODE)) Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
+                val zoom = cfg.optInt("displayZoomPercent", Prefs.get(ctx, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100)
+                val zoomChanged = zoom.toString() != Prefs.get(ctx, Prefs.DISPLAY_ZOOM)
+                if (zoomChanged) Prefs.set(ctx, Prefs.DISPLAY_ZOOM, zoom.toString())
                 if (home.isNotEmpty()) {
                     val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
                         host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
-                        idle.toString() != Prefs.get(ctx, Prefs.IDLE_RETURN)
+                        idle.toString() != Prefs.get(ctx, Prefs.IDLE_RETURN) ||
+                        zoomChanged
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
-                    if (changed) ui.post { handler.onConfigUpdated(home, host, idle) }
+                    if (changed) ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
+                } else if (zoomChanged) {
+                    // No home-link change to carry the update, but the zoom
+                    // still has to reach the on-screen WebView.
+                    ui.post { handler.onConfigUpdated(Prefs.get(ctx, Prefs.HOME_URL), Prefs.get(ctx, Prefs.ALLOWED_HOST), idle, zoom) }
                 }
             }
             val cmds = json.optJSONArray("commands") ?: return
@@ -184,11 +195,14 @@ class AgentClient(
                     val idle = payload.optInt("idleReturnSeconds",
                         Prefs.get(ctx, Prefs.IDLE_RETURN).toIntOrNull() ?: 0)
                     val adminCode = payload.optString("adminCode", Prefs.get(ctx, Prefs.ADMIN_CODE))
+                    val zoom = payload.optInt("displayZoomPercent",
+                        Prefs.get(ctx, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100)
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
                     Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
-                    ui.post { handler.onConfigUpdated(home, host, idle) }
+                    Prefs.set(ctx, Prefs.DISPLAY_ZOOM, zoom.toString())
+                    ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }
                 else -> { ok = false; result = "unknown command" }

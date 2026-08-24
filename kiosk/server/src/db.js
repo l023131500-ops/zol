@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS devices (
   allowed_host  TEXT,                            -- comma-separated hosts the kiosk may open (event + payment gateway)
   home_url      TEXT,                            -- the specific event/venue link the kiosk locks to
   idle_return_seconds INTEGER NOT NULL DEFAULT 0,-- 0 = off; else return to home_url after N idle seconds
+  display_zoom_percent INTEGER NOT NULL DEFAULT 100, -- CSS zoom applied in the WebView; 100 = no scaling
   status        TEXT DEFAULT 'unknown',          -- last reported app status
   online        INTEGER NOT NULL DEFAULT 0,
   last_seen     TEXT,
@@ -125,6 +126,10 @@ ensureColumn('devices', 'exit_code', 'exit_code TEXT');
 // documents for device_token.
 ensureColumn('devices', 'last_screenshot', 'last_screenshot TEXT');
 ensureColumn('devices', 'last_screenshot_at', 'last_screenshot_at TEXT');
+// KIOSK_BUILD.md §5 "הגדלת מסך (זום)": many locked sites are built mobile-first
+// and render small on a 21"+ kiosk screen. 100 = no scaling, matching every
+// device enrolled before this column existed.
+ensureColumn('devices', 'display_zoom_percent', 'display_zoom_percent INTEGER NOT NULL DEFAULT 100');
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(

@@ -38,6 +38,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private var isAdminUnlocked = false
     private var allowedHosts = ""       // comma-separated
     private var idleReturnSeconds = 0
+    private var displayZoomPercent = 100
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tapResetRunnable: Runnable? = null
     private var relockRunnable: Runnable? = null
@@ -88,6 +89,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         }
         allowedHosts = Prefs.get(this, Prefs.ALLOWED_HOST)
         idleReturnSeconds = Prefs.get(this, Prefs.IDLE_RETURN).toIntOrNull() ?: 0
+        displayZoomPercent = Prefs.get(this, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100
 
         acquireWakeLock(); lockScreenOn(); hideSystemUI()
         setupWebView()
@@ -177,6 +179,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
                 super.onPageFinished(view, url)
                 Prefs.set(this@KioskActivity, Prefs.LAST_URL, url)
                 injectLinkGuard(view)
+                applyZoom(view)
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
@@ -194,6 +197,29 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
                 .observe(document.body,{childList:true,subtree:true});
             })();
         """.trimIndent(), null)
+    }
+
+    /**
+     * KIOSK_BUILD.md §5: many locked sites are built mobile-first and render
+     * small on a 21"+ kiosk panel. CSS `zoom` (Chromium-WebView-only, which is
+     * exactly what this app runs on) scales the whole rendered page — layout
+     * included — unlike `-webkit-transform: scale()`, which would leave empty
+     * space around a scaled-down viewport instead of reflowing to fill it.
+     * `displayZoomPercent` reaches here only from the server (JSON int, never
+     * user-typed text), so there is no string to sanitize — but the value is
+     * clamped again anyway: this function also runs against whatever was last
+     * written to Prefs, which could predate the server-side clamp in
+     * `display.js` landing (an older config cached before that fix shipped).
+     *
+     * Always runs, even at 100% — the config-updated (no-navigation) call
+     * site can go from a non-default zoom back to 100%, and skipping the
+     * no-op case there would leave the *previous* zoom's already-injected
+     * style sitting on the page instead of clearing it.
+     */
+    private fun applyZoom(view: WebView) {
+        val pct = displayZoomPercent.coerceIn(50, 300)
+        view.evaluateJavascript(
+            "document.documentElement.style.zoom='${pct}%';", null)
     }
 
     private fun toast(m: String) = runOnUiThread { Toast.makeText(this, m, Toast.LENGTH_SHORT).show() }
@@ -247,9 +273,11 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         } catch (e: Exception) { null }
         agent.uploadScreenshot(commandId, bitmap)
     }
-    override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int) {
+    override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int, zoomPercent: Int) {
         allowedHosts = host
         idleReturnSeconds = idleSeconds
+        val zoomChanged = zoomPercent != displayZoomPercent
+        displayZoomPercent = zoomPercent
         // The same gate onSetUrl already applies to a command-driven
         // navigation. A pushed config is server data like any other, and the
         // server-side half of this fix (routes/devices.js) only stops a
@@ -261,6 +289,11 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         if (homeUrl.isNotEmpty()) {
             if (hostAllowed(android.net.Uri.parse(homeUrl).host)) webView.loadUrl(homeUrl)
             else toast("קישור חסום: מחוץ לדומיינים המורשים")
+            // A navigation above already re-applies zoom via onPageFinished.
+        } else if (zoomChanged) {
+            // No navigation to carry onPageFinished's applyZoom() call — the
+            // currently-loaded page needs it applied directly instead.
+            applyZoom(webView)
         }
         resetIdleTimer()
     }

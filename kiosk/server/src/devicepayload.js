@@ -27,7 +27,7 @@ export const CONSOLE_DEVICE_FIELDS = [
   'id', 'owner_id', 'owner_name', 'serial', 'name', 'allowed_host', 'home_url',
   'idle_return_seconds', 'status', 'online', 'last_seen', 'app_version',
   'battery', 'model', 'android_ver', 'ip', 'created_at', 'exit_code',
-  'last_screenshot_at',
+  'last_screenshot_at', 'display_zoom_percent',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */

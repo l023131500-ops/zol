@@ -93,6 +93,7 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       // heartbeat may come after it — so the maintenance code has to land
       // here too, not only on the heartbeat/update_config paths.
       adminCode: device.exit_code || '',
+      displayZoomPercent: device.display_zoom_percent,
     },
   });
 });
@@ -126,7 +127,7 @@ router.post('/heartbeat', (req, res) => {
     config: {
       homeUrl: fresh.home_url, allowedHost: fresh.allowed_host,
       name: fresh.name, idleReturnSeconds: fresh.idle_return_seconds,
-      adminCode: fresh.exit_code || '',
+      adminCode: fresh.exit_code || '', displayZoomPercent: fresh.display_zoom_percent,
     },
     commands,
   });

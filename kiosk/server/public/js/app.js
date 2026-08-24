@@ -283,7 +283,8 @@ function mapDevice(d) {
     lastSeen: d.last_seen || d.lastSeen,
     battery: d.battery, model: d.model, appVersion: d.app_version || d.appVersion, ip: d.ip,
     exitCode: d.exit_code || d.exitCode || '',
-    lastScreenshotAt: d.last_screenshot_at || d.lastScreenshotAt || null };
+    lastScreenshotAt: d.last_screenshot_at || d.lastScreenshotAt || null,
+    displayZoomPercent: d.display_zoom_percent ?? d.displayZoomPercent ?? 100 };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -336,7 +337,7 @@ function deviceCard(d) {
       <span class="pill ${d.online ? 'on' : 'off'}">${d.online ? 'מחובר' : 'מנותק'}</span>
     </div>
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
-      🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}<br/>
+      🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
       🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}</div>
     <div class="actions"></div></div>`);
   const acts = $('.actions', c);
@@ -392,6 +393,8 @@ async function editDevice(d) {
     <div class="field"><label>קישור האירוע/אולם (Home URL)</label><input id="h" value="${esc(d.homeUrl || '')}" dir="ltr" /></div>
     <div class="field"><label>דומיינים מותרים לפתיחה במכשיר</label><div id="hl"></div></div>
     <div class="field"><label>חזרה אוטומטית לקישור לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="idle" type="number" min="0" value="${d.idleReturnSeconds || 0}" dir="ltr" /></div>
+    <div class="field"><label>הגדלת תצוגה (זום): <span id="zoom-val">${d.displayZoomPercent || 100}%</span></label>
+      <input id="zoom" type="range" min="50" max="300" step="10" value="${d.displayZoomPercent || 100}" dir="ltr" /></div>
     <div class="field"><label>קוד תחזוקה מקומי (5 הקשות בפינת המסך)</label>
       <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
       <div style="font-size:12px;color:var(--muted);margin-top:-8px">
@@ -401,11 +404,12 @@ async function editDevice(d) {
   let homeHost = '';
   try { homeHost = new URL(d.homeUrl).host; } catch { /* no home URL yet */ }
   const hl = hostListEditor($('#hl', m), d.allowedHost, homeHost);
+  $('#zoom', m).oninput = (e) => { $('#zoom-val', m).textContent = `${e.target.value}%`; };
 
   $('#s', m).onclick = async () => {
     // Adopt a domain that was typed but not added, rather than dropping it.
     if (!hl.commitPending()) return;
-    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value };
+    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value) };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }

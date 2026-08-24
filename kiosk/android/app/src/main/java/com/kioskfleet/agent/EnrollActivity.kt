@@ -122,6 +122,7 @@ class EnrollActivity : AppCompatActivity() {
             Prefs.set(this, Prefs.DEVICE_NAME, dev.optString("name"))
             Prefs.set(this, Prefs.LAST_URL, dev.optString("homeUrl"))
             Prefs.set(this, Prefs.ADMIN_CODE, dev.optString("adminCode"))
+            Prefs.set(this, Prefs.DISPLAY_ZOOM, dev.optInt("displayZoomPercent", 100).toString())
             null
         } catch (e: Exception) {
             "שגיאת רשת: ${e.message}"

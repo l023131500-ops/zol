@@ -6,6 +6,7 @@ import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { notifyConsolesOfDevice } from '../hub.js';
 import { hostsForUrl, hostAllowed, normalizeHostCsv, parseHosts } from '../hosts.js';
 import { validateExitCode } from '../exitcode.js';
+import { clampZoomPercent } from '../display.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -47,7 +48,7 @@ router.get('/devices/:id', requireAuth, (req, res) => {
 router.patch('/devices/:id', requireAuth, (req, res) => {
   const { device, error } = getOwnedDevice(req, req.params.id);
   if (error) return res.sendStatus(error);
-  let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode } = req.body || {};
+  let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent } = req.body || {};
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
@@ -96,20 +97,23 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
 
   db.prepare(`UPDATE devices SET name = COALESCE(?, name), home_url = COALESCE(?, home_url),
      allowed_host = COALESCE(?, allowed_host), idle_return_seconds = COALESCE(?, idle_return_seconds),
-     exit_code = COALESCE(?, exit_code) WHERE id = ?`)
+     exit_code = COALESCE(?, exit_code), display_zoom_percent = COALESCE(?, display_zoom_percent) WHERE id = ?`)
     .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
-         exitCodeValue, device.id);
+         exitCodeValue,
+         displayZoomPercent != null ? clampZoomPercent(displayZoomPercent) : null,
+         device.id);
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   logEvent(device.id, req.user.id, 'config_update', null);
   notifyConsolesOfDevice(fresh, {});
   // Tell the device to re-pull its config (URL, hosts, idle-return, admin
-  // code) live. adminCode is sent on every update_config, not only when it
-  // changed here — the same command already carries the other three
-  // unconditionally, and the agent only ever writes what it is sent.
+  // code, zoom) live. adminCode/displayZoomPercent are sent on every
+  // update_config, not only when they changed here — the same command
+  // already carries the other fields unconditionally, and the agent only
+  // ever writes what it is sent.
   issueCommand(fresh, 'update_config', {
     homeUrl: fresh.home_url, allowedHost: fresh.allowed_host, idleReturnSeconds: fresh.idle_return_seconds,
-    adminCode: fresh.exit_code || '',
+    adminCode: fresh.exit_code || '', displayZoomPercent: fresh.display_zoom_percent,
   }, req.user.id);
   res.json({ device: publicDevice(fresh) });
 });
@@ -195,6 +199,7 @@ function publicDevice(d) {
     lastSeen: d.last_seen, appVersion: d.app_version, battery: d.battery, model: d.model,
     androidVer: d.android_ver, ip: d.ip, createdAt: d.created_at, exitCode: d.exit_code || '',
     lastScreenshotAt: d.last_screenshot_at || null,
+    displayZoomPercent: d.display_zoom_percent ?? 100,
   };
 }
 

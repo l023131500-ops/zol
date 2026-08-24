@@ -15,6 +15,7 @@ object Prefs {
     const val DEVICE_NAME  = "device_name"
     const val ADMIN_CODE   = "admin_code"      // local maintenance code
     const val LAST_URL     = "last_url"        // resume after crash/reboot
+    const val DISPLAY_ZOOM = "display_zoom"    // CSS zoom percent applied to the WebView (100 = none)
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
