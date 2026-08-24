@@ -1,14 +1,23 @@
 import express from 'express';
 import { customAlphabet } from 'nanoid';
-import { db, logEvent } from '../db.js';
+import { db, logEvent, approvedClientsForDevice } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { hostAllowed, hostsForUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
 import { buildWindowsKioskScript } from '../windowspackage.js';
+import { sanitizeSerial, buildUsbOfflineScript } from '../usbpackage.js';
+import { notifyConsolesOfDevice } from '../hub.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
+// Same alphabet/length as routes/agent.js's own `tokenGen` — not imported
+// from there because this endpoint provisions a device from fields the
+// network /enroll route never has (no model/androidVersion/appVersion; the
+// device hasn't run yet), and touching that already-live, already-tested
+// handler for an unrelated feature is a bigger risk than the few duplicated
+// lines below (kept deliberately close to it so the two stay easy to compare).
+const deviceTokenGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghijkmnpqrstuvwxyz', 40);
 
 // Fetch a device, enforcing ownership (admins may access any device).
 //
@@ -190,6 +199,73 @@ router.delete('/enrollments/:id', requireAuth, (req, res) => {
   if (!enr || enr.owner_id !== req.user.id) return res.sendStatus(404);
   db.prepare('DELETE FROM enrollments WHERE id = ?').run(enr.id);
   res.json({ ok: true });
+});
+
+// KIOSK_BUILD.md §3 Route D + §6 + §10-D: a fully offline install. Every
+// other route lets the *device* redeem the code over the network, at the
+// venue; §10-D's own steps require zero internet at the venue, so this
+// endpoint provisions the device row right now, while the owner is still at
+// their desk and online, from a serial they already read off the physical
+// unit (`adb devices`). text/plain, like the Windows package: the console
+// downloads this as a .sh file, not something it parses.
+router.post('/enrollments/:id/usb-package', requireAuth, (req, res) => {
+  const enr = db.prepare('SELECT * FROM enrollments WHERE id = ?').get(req.params.id);
+  if (!enr || enr.owner_id !== req.user.id) return res.sendStatus(404);
+  if (enr.used) return res.status(409).json({ error: 'קוד רישום כבר נוצל' });
+  if (enr.expires_at && new Date(enr.expires_at) < new Date())
+    return res.status(410).json({ error: 'קוד רישום פג תוקף' });
+
+  const serial = sanitizeSerial(req.body?.serial);
+  if (!serial) return res.status(400).json({ error: 'נא להזין מספר סידורי (מהפקודה adb devices)' });
+
+  // Same re-enroll-vs-new-device split /api/agent/enroll makes, but here the
+  // "already exists" case matters more: an owner may re-generate this
+  // package to rotate a lost/leaked token for hardware they already own.
+  const existing = db.prepare('SELECT * FROM devices WHERE serial = ?').get(serial);
+  if (existing && existing.owner_id !== req.user.id) {
+    return res.status(409).json({ error: 'מכשיר זה כבר רשום לחשבון אחר' });
+  }
+  if (!existing) {
+    const count = db.prepare('SELECT COUNT(*) c FROM devices WHERE owner_id = ?').get(req.user.id).c;
+    if (count >= req.user.device_limit) {
+      return res.status(403).json({ error: 'הגעת למכסת המכשירים המותרת בחשבון' });
+    }
+  }
+
+  const token = deviceTokenGen();
+  const now = new Date().toISOString();
+  let device;
+  if (existing) {
+    db.prepare('UPDATE devices SET device_token = ?, name = COALESCE(?, name), home_url = ?, allowed_host = ?, idle_return_seconds = ?, last_seen = ? WHERE id = ?')
+      .run(token, enr.name, enr.home_url, enr.allowed_host, enr.idle_return_seconds ?? 0, now, existing.id);
+    device = db.prepare('SELECT * FROM devices WHERE id = ?').get(existing.id);
+  } else {
+    const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, idle_return_seconds, last_seen)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(req.user.id, serial, enr.name || `מכשיר ${serial.slice(-4)}`, token, enr.allowed_host, enr.home_url, enr.idle_return_seconds ?? 0, now);
+    device = db.prepare('SELECT * FROM devices WHERE id = ?').get(info.lastInsertRowid);
+  }
+
+  db.prepare('UPDATE enrollments SET used = 1, device_id = ? WHERE id = ?').run(device.id, enr.id);
+  logEvent(device.id, req.user.id, 'enrolled_offline_usb', `serial=${serial}`);
+  notifyConsolesOfDevice(device, {});
+
+  let script;
+  try {
+    script = buildUsbOfflineScript({
+      serial, deviceToken: token, deviceName: device.name, homeUrl: device.home_url, allowedHost: device.allowed_host,
+      idleReturnSeconds: device.idle_return_seconds, adminCode: device.exit_code || '',
+      displayZoomPercent: device.display_zoom_percent, approvedClients: approvedClientsForDevice(device.id),
+    });
+  } catch (e) {
+    // Device row is already provisioned at this point (matching how a
+    // network re-enroll would have also already rotated the token before
+    // any response is sent) — only reachable if home_url is somehow still
+    // missing, which the enrollment-creation route already prevents.
+    return res.status(400).json({ error: e.message });
+  }
+  res.setHeader('Content-Disposition', `attachment; filename="kioskfleet-offline-${serial}.sh"`);
+  res.type('text/plain; charset=utf-8').send(script);
 });
 
 function publicDevice(d) {
