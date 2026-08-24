@@ -23,3 +23,28 @@ export function normalizeClientCode(raw) {
   if (!/^[A-Z0-9]+$/.test(s)) return '';
   return s;
 }
+
+// KIOSK_BUILD.md §9 "מיתוג לקוח: מסך פתיחה, לוגו, צבעים לכל לקוח" — both
+// fields are optional (a client with no branding is exactly today's
+// behaviour), so '' means "not set", not "invalid". A non-empty input that
+// fails validation is a caller error and routes/clients.js rejects it rather
+// than silently storing '' for what the owner typed as a real value.
+
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+/** "#RRGGBB" (any case, leading '#' optional) -> normalized "#rrggbb", or '' if empty/not a valid hex colour. */
+export function normalizeBrandColor(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  const withHash = s.startsWith('#') ? s : `#${s}`;
+  return HEX_COLOR_RE.test(withHash) ? withHash.toLowerCase() : '';
+}
+
+/** An absolute http(s) logo URL, or '' if empty/not one — same bar signage.js's playlist URLs hold. */
+export function normalizeLogoUrl(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  let parsed;
+  try { parsed = new URL(s); } catch { return ''; }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? s : '';
+}

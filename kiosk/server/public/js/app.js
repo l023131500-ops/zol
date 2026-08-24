@@ -637,17 +637,29 @@ async function viewClients() {
       <div class="field"><label>שם הלקוח</label><input id="cl-name" placeholder="למשל: משפחת כהן" /></div>
       <div class="field"><label>כתובת אתר התדמית של הלקוח</label><input id="cl-url" placeholder="https://example.com/client/7" dir="ltr" /></div>
       <div class="field"><label>דומיינים נוספים מותרים</label><div id="cl-hl"></div></div>
+      <div class="field"><label>לוגו למסך הפתיחה (אופציונלי)</label><input id="cl-logo" placeholder="https://example.com/logo.png" dir="ltr" /></div>
+      <div class="field"><label>צבע מותג למסך הפתיחה (אופציונלי)</label>
+        <div class="row" style="gap:8px;align-items:center">
+          <input id="cl-color" type="color" value="#2563eb" style="width:48px;height:36px;padding:2px" />
+          <button type="button" class="btn btn-light btn-sm" id="cl-color-clear">ללא צבע</button>
+        </div>
+      </div>
       <button class="btn btn-primary" id="cl-create">שמור לקוח</button>
     </div>
     <div class="card" style="max-width:680px"><h3>הלקוחות שלי</h3><div id="cl-list">טוען…</div></div>`;
   const clientHl = hostListEditor($('#cl-hl'), '', '');
+  let clColorSet = false;
+  $('#cl-color').addEventListener('input', () => { clColorSet = true; });
+  $('#cl-color-clear').onclick = () => { clColorSet = false; $('#cl-color').value = '#2563eb'; };
   $('#cl-create').onclick = async () => {
     const code = $('#cl-code').value.trim(), name = $('#cl-name').value.trim(), url = $('#cl-url').value.trim(), allowedHost = clientHl.value();
+    const logoUrl = $('#cl-logo').value.trim(), brandColor = clColorSet ? $('#cl-color').value : '';
     if (!code || !name || !url) return toast('נא למלא מזהה, שם וכתובת', false);
     const btn = $('#cl-create');
     btn.disabled = true;
-    try { await api('/clients', { method: 'POST', body: JSON.stringify({ code, name, url, allowedHost }) });
-      toast('הלקוח נשמר'); $('#cl-code').value = ''; $('#cl-name').value = ''; $('#cl-url').value = ''; loadClients(); }
+    try { await api('/clients', { method: 'POST', body: JSON.stringify({ code, name, url, allowedHost, logoUrl, brandColor }) });
+      toast('הלקוח נשמר'); $('#cl-code').value = ''; $('#cl-name').value = ''; $('#cl-url').value = ''; $('#cl-logo').value = '';
+      clColorSet = false; $('#cl-color').value = '#2563eb'; loadClients(); }
     catch (e) { toast(e.message, false); }
     finally { btn.disabled = false; }
   };
@@ -657,11 +669,58 @@ async function loadClients() {
   const { clients } = await api('/clients');
   const box = $('#cl-list'); if (!box) return;
   if (!clients.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין עדיין לקוחות.</p>'; return; }
-  box.innerHTML = '<table><tr><th>מזהה</th><th>שם</th><th>כתובת</th><th></th></tr>' +
+  box.innerHTML = '<table><tr><th>מזהה</th><th>שם</th><th>כתובת</th><th>מיתוג</th><th></th></tr>' +
     clients.map((c) => `<tr><td><span class="code-chip" dir="ltr">${esc(c.code)}</span></td><td>${esc(c.name)}</td>
       <td dir="ltr" style="font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis">${esc(c.url)}</td>
-      <td><button class="btn btn-danger btn-sm" data-del="${c.id}">מחק</button></td></tr>`).join('') + '</table>';
+      <td>${c.brandColor ? `<span class="brand-swatch" style="background:${esc(c.brandColor)}" title="${esc(c.brandColor)}"></span>` : ''}${c.logoUrl ? ' 🖼️' : ''}</td>
+      <td><button class="btn btn-light btn-sm" data-edit="${c.id}">עריכה</button>
+      <button class="btn btn-danger btn-sm" data-del="${c.id}">מחק</button></td></tr>`).join('') + '</table>';
+  box.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => { const c = clients.find((x) => x.id == b.dataset.edit); clientModal(c); });
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/clients/' + b.dataset.del, { method: 'DELETE' }); loadClients(); });
+}
+
+/**
+ * Edit dialog for an existing client — the create form above only ever
+ * POSTs; PATCH /clients/:id already accepted every one of these fields, but
+ * nothing in the console called it, so branding (or a mistyped URL) could
+ * never be changed once saved except by deleting and re-registering, which
+ * would also hand out a new device-approval requirement (§2★ה is keyed by
+ * client id) for something that never needed one.
+ */
+function clientModal(c) {
+  const m = modal(`<h3>עריכת לקוח</h3>
+    <div class="field"><label>מזהה לקוח</label><input id="ce-code" value="${esc(c.code)}" dir="ltr" /></div>
+    <div class="field"><label>שם הלקוח</label><input id="ce-name" value="${esc(c.name)}" /></div>
+    <div class="field"><label>כתובת אתר התדמית</label><input id="ce-url" value="${esc(c.url)}" dir="ltr" /></div>
+    <div class="field"><label>דומיינים נוספים מותרים</label><div id="ce-hl"></div></div>
+    <div class="field"><label>לוגו למסך הפתיחה (אופציונלי)</label><input id="ce-logo" value="${esc(c.logoUrl || '')}" placeholder="https://example.com/logo.png" dir="ltr" /></div>
+    <div class="field"><label>צבע מותג למסך הפתיחה (אופציונלי)</label>
+      <div class="row" style="gap:8px;align-items:center">
+        <input id="ce-color" type="color" value="${esc(c.brandColor || '#2563eb')}" style="width:48px;height:36px;padding:2px" />
+        <button type="button" class="btn btn-light btn-sm" id="ce-color-clear">ללא צבע</button>
+      </div>
+    </div>
+    <div class="row"><button class="btn btn-primary" id="ce-save">שמירה</button><button class="btn btn-light" id="ce-cancel">ביטול</button></div>`);
+  const editHl = hostListEditor($('#ce-hl', m), c.allowedHost || '', '');
+  let ceColorSet = !!c.brandColor;
+  $('#ce-color', m).addEventListener('input', () => { ceColorSet = true; });
+  $('#ce-color-clear', m).onclick = () => { ceColorSet = false; $('#ce-color', m).value = '#2563eb'; };
+  $('#ce-cancel', m).onclick = () => m.remove();
+  $('#ce-save', m).onclick = async () => {
+    const btn = $('#ce-save', m);
+    btn.disabled = true;
+    try {
+      await api('/clients/' + c.id, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          code: $('#ce-code', m).value.trim(), name: $('#ce-name', m).value.trim(), url: $('#ce-url', m).value.trim(),
+          allowedHost: editHl.value(), logoUrl: $('#ce-logo', m).value.trim(), brandColor: ceColorSet ? $('#ce-color', m).value : '',
+        }),
+      });
+      toast('הלקוח עודכן'); m.remove(); loadClients();
+    } catch (e) { toast(e.message, false); }
+    finally { btn.disabled = false; }
+  };
 }
 
 // ── SETTINGS ────────────────────────────────────────────────────

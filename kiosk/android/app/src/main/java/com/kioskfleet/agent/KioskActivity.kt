@@ -33,6 +33,15 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         const val CORNER_TAPS_REQUIRED = 5
         const val CORNER_SIZE_PX       = 120
         const val TAP_RESET_DELAY_MS   = 3000L
+        // KIOSK_BUILD.md §9 "מיתוג לקוח: מסך פתיחה, לוגו, צבעים לכל לקוח".
+        const val CLIENT_SPLASH_MS     = 1400L
+        // Defense in depth: routes/clients.js already only ever stores a
+        // value that matches this before it reaches a device, but a device
+        // caches the last config it received (Prefs.APPROVED_CLIENTS) and
+        // renders it long after that validation ran — this is what stands
+        // between a corrupted/stale cache value and an invalid CSS colour
+        // silently doing nothing (or, worse, being used unescaped).
+        val BRAND_COLOR_RE = Regex("^#[0-9a-fA-F]{6}$")
     }
 
     private lateinit var webView: WebView
@@ -545,9 +554,53 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         activeClientCode = client.optString("code")
         allowedHosts = hosts
         clearBrowsingSession()
-        webView.loadUrl(url)
-        webView.clearHistory()
+        showClientBrandSplash(client, url)
         resetIdleTimer()
+    }
+
+    /**
+     * KIOSK_BUILD.md §9 "מיתוג לקוח: מסך פתיחה, לוגו, צבעים לכל לקוח" — a
+     * brief branded splash before a client's own site loads. Built as an
+     * inline HTML page loaded into the same WebView, not a native ImageView:
+     * the WebView already fetches and decodes remote images for every client
+     * site, so this needs no image-loading library and no extra permission.
+     * Skipped entirely when a client has neither a logo nor a colour — for a
+     * plain client that would just be a blank flash, worse than no splash.
+     */
+    private fun showClientBrandSplash(client: JSONObject, targetUrl: String) {
+        val logoUrl = client.optString("logoUrl")
+        val brandColorRaw = client.optString("brandColor")
+        val brandColor = if (BRAND_COLOR_RE.matches(brandColorRaw)) brandColorRaw else ""
+        // logoUrl already went through routes/clients.js's http(s)-only check
+        // before it was stored, and is only ever loaded as an <img src>, not
+        // interpreted — same trust level a client's own `url` already gets
+        // from webView.loadUrl() above. Only the *attribute quoting* needs
+        // escaping here, so a stray `"` in a cached value cannot break out
+        // of the src attribute into the surrounding splash markup.
+        if (logoUrl.isEmpty() && brandColor.isEmpty()) {
+            webView.loadUrl(targetUrl)
+            webView.clearHistory()
+            return
+        }
+        val bg = brandColor.ifEmpty { "#111111" }
+        val logoTag = if (logoUrl.isNotEmpty())
+            "<img src=\"${logoUrl.replace("\"", "&quot;")}\" style=\"max-width:70vw;max-height:50vh;object-fit:contain\" />"
+        else ""
+        val html = "<html><body style=\"margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:$bg\">$logoTag</body></html>"
+        webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+        webView.clearHistory()
+        val expectedClientCode = client.optString("code")
+        mainHandler.postDelayed({
+            // A second switch (operator taps another item, or "עמוד הבית")
+            // during the splash delay must win — this delayed load only
+            // fires the target it was scheduled for if that is still the
+            // active selection, the same "no stale navigation" guard
+            // returnToVenue()/onConfigUpdated() already apply elsewhere.
+            if (activeClientCode == expectedClientCode) {
+                webView.loadUrl(targetUrl)
+                webView.clearHistory()
+            }
+        }, CLIENT_SPLASH_MS)
     }
 
     private fun showAdminDialog() {

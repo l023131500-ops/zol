@@ -198,6 +198,12 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
 
 .code-chip { font-family: monospace; font-size: 20px; letter-spacing: 3px; background: #eef3ff; color: var(--accent); padding: 8px 16px; border-radius: 10px; display: inline-block; font-weight: 700; }
 
+/* KIOSK_BUILD.md §9 client branding preview (מיתוג לקוח) — the fill is an
+   owner's arbitrary chosen colour, so a plain 1px border in a fixed colour
+   could vanish against it; a dark+light double ring stays visible against
+   any fill on either light or dark cards. */
+.brand-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 4px; vertical-align: middle; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.5); }
+
 /* Modal */
 .modal-bg { position: fixed; inset: 0; background: rgba(7,20,40,.55); display: grid; place-items: center; z-index: 100; padding: 20px; }
 .modal { background: #fff; border-radius: 18px; padding: 28px; width: 100%; max-width: 460px; max-height: 90vh; overflow: auto; }

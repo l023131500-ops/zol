@@ -177,6 +177,13 @@ ensureColumn('devices', 'schedule_last_state', 'schedule_last_state TEXT');
 ensureColumn('devices', 'signage_enabled', 'signage_enabled INTEGER NOT NULL DEFAULT 0');
 ensureColumn('devices', 'signage_urls', 'signage_urls TEXT');
 ensureColumn('devices', 'signage_interval_seconds', 'signage_interval_seconds INTEGER NOT NULL DEFAULT 15');
+// KIOSK_BUILD.md §9 "מיתוג לקוח: מסך פתיחה, לוגו, צבעים לכל לקוח". NULL on
+// every existing client, the honest value — no branding was ever configured
+// before this column existed, matching exit_code's "NULL means never set"
+// convention above. Both are optional per-client, unlike a device's own
+// display_zoom_percent, which always has a value.
+ensureColumn('clients', 'logo_url', 'logo_url TEXT');
+ensureColumn('clients', 'brand_color', 'brand_color TEXT');
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(
@@ -200,10 +207,17 @@ export function logEvent(deviceId, userId, type, detail) {
  * clients.js's INSERT runs every URL through `hostsForUrl`, which folds in
  * the URL's own host at minimum), so there is no empty-scope case here to
  * additionally guard against.
+ *
+ * `logoUrl`/`brandColor` ride along the same offline-first payload for the
+ * same reason as the rest: KIOSK_BUILD.md §9's per-client splash has to
+ * render on a device that may be showing this list with no network at all,
+ * so the branding travels with the client rather than being fetched again
+ * when one is picked.
  */
 export function approvedClientsForDevice(deviceId) {
   return db.prepare(
-    `SELECT c.code, c.name, c.url, c.allowed_host AS allowedHost FROM device_clients dc
+    `SELECT c.code, c.name, c.url, c.allowed_host AS allowedHost,
+            c.logo_url AS logoUrl, c.brand_color AS brandColor FROM device_clients dc
      JOIN clients c ON c.id = dc.client_id
      WHERE dc.device_id = ? ORDER BY c.name`
   ).all(deviceId);
