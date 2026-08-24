@@ -138,6 +138,14 @@ class AgentClient(
                 // effect on screen.
                 val adminCode = cfg.optString("adminCode", Prefs.get(ctx, Prefs.ADMIN_CODE))
                 if (adminCode != Prefs.get(ctx, Prefs.ADMIN_CODE)) Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
+                // Same "must land on its own, not only piggybacked on a homeUrl
+                // change" reasoning as adminCode above: an owner approving or
+                // revoking a client (routes/devices.js's pushConfigUpdate) does
+                // not touch home_url, so the §2★ה selection screen's cache would
+                // otherwise only ever refresh on an unrelated home-link edit.
+                val approvedClientsJson = cfg.optJSONArray("approvedClients")?.toString() ?: "[]"
+                if (approvedClientsJson != Prefs.get(ctx, Prefs.APPROVED_CLIENTS, "[]"))
+                    Prefs.set(ctx, Prefs.APPROVED_CLIENTS, approvedClientsJson)
                 val zoom = cfg.optInt("displayZoomPercent", Prefs.get(ctx, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100)
                 val zoomChanged = zoom.toString() != Prefs.get(ctx, Prefs.DISPLAY_ZOOM)
                 if (zoomChanged) Prefs.set(ctx, Prefs.DISPLAY_ZOOM, zoom.toString())
@@ -197,11 +205,14 @@ class AgentClient(
                     val adminCode = payload.optString("adminCode", Prefs.get(ctx, Prefs.ADMIN_CODE))
                     val zoom = payload.optInt("displayZoomPercent",
                         Prefs.get(ctx, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100)
+                    val approvedClientsJson = payload.optJSONArray("approvedClients")?.toString()
+                        ?: Prefs.get(ctx, Prefs.APPROVED_CLIENTS, "[]")
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
                     Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
                     Prefs.set(ctx, Prefs.DISPLAY_ZOOM, zoom.toString())
+                    Prefs.set(ctx, Prefs.APPROVED_CLIENTS, approvedClientsJson)
                     ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }

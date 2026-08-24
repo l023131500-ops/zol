@@ -158,7 +158,7 @@ router.post('/identify', (req, res) => {
   const code = normalizeClientCode(req.body?.code);
   if (!code) return res.status(400).json({ error: 'קוד לקוח לא תקין' });
   const client = db.prepare(
-    `SELECT c.code, c.name, c.url FROM clients c
+    `SELECT c.code, c.name, c.url, c.allowed_host AS allowedHost FROM clients c
      JOIN device_clients dc ON dc.client_id = c.id AND dc.device_id = ?
      WHERE c.owner_id = ? AND c.code = ?`
   ).get(device.id, device.owner_id, code);

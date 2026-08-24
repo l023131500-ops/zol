@@ -16,6 +16,7 @@ object Prefs {
     const val ADMIN_CODE   = "admin_code"      // local maintenance code
     const val LAST_URL     = "last_url"        // resume after crash/reboot
     const val DISPLAY_ZOOM = "display_zoom"    // CSS zoom percent applied to the WebView (100 = none)
+    const val APPROVED_CLIENTS = "approved_clients"  // JSON array of {code,name,url,allowedHost}, cached for the offline §2★ה selection screen
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 

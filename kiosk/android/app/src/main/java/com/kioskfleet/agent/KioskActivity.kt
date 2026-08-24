@@ -16,11 +16,16 @@ import android.view.WindowManager
 import android.webkit.*
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * The kiosk surface: a locked WebView bound to the server-assigned host, plus a
- * hidden maintenance entry (5 corner taps + local code). All fleet control comes
- * from the server through AgentClient — this class only executes UI actions.
+ * hidden entry (5 corner taps) that opens a selection screen — switch to the
+ * device's own home or any owner-approved client (KIOSK_BUILD.md §2★ה), or
+ * (behind a further local code) real device maintenance. All fleet control
+ * comes from the server through AgentClient — this class only executes UI
+ * actions.
  */
 class KioskActivity : AppCompatActivity(), CommandHandler {
 
@@ -36,7 +41,9 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private var overlay: TextView? = null
     private var cornerTapCount = 0
     private var isAdminUnlocked = false
-    private var allowedHosts = ""       // comma-separated
+    private var allowedHosts = ""       // comma-separated — the *currently active* scope (device baseline, or a selected client's)
+    private var deviceAllowedHosts = "" // comma-separated — the device's own baseline scope (home_url + extras), independent of any client selection
+    private var activeClientCode: String? = null  // non-null while showing an approved client's site (§2★ה); null = on the device's own home
     private var idleReturnSeconds = 0
     private var displayZoomPercent = 100
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -44,11 +51,18 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private var relockRunnable: Runnable? = null
     private val idleRunnable = Runnable { returnToVenue() }
 
-    /** True if a host is inside the device's allow-list (event domain + payment gateway). */
-    private fun hostAllowed(host: String?): Boolean {
+    /**
+     * True if a host is inside an allow-list (event domain + payment gateway).
+     * Defaults to the currently active scope (`allowedHosts`) — the baseline
+     * while on the device's own home, or the selected client's own scope
+     * while `activeClientCode` is set. A caller that needs to check against
+     * the device's baseline specifically, regardless of what is active right
+     * now (e.g. an explicit remote `set_url`), passes `hostsCsv` explicitly.
+     */
+    private fun hostAllowed(host: String?, hostsCsv: String = allowedHosts): Boolean {
         if (host.isNullOrEmpty()) return false
         val h = host.lowercase()
-        val list = allowedHosts.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        val list = hostsCsv.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
         if (list.isEmpty()) return true
         return list.any { h == it || h.endsWith(".$it") }
     }
@@ -60,10 +74,10 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         }
     }
 
-    /** A stored URL, or "" if its host is not in the current allow-list. */
-    private fun safeStoredUrl(candidate: String): String {
+    /** A stored URL, or "" if its host is not in the given (default: current) allow-list. */
+    private fun safeStoredUrl(candidate: String, hostsCsv: String = allowedHosts): String {
         if (candidate.isEmpty()) return ""
-        return if (hostAllowed(android.net.Uri.parse(candidate).host)) candidate else ""
+        return if (hostAllowed(android.net.Uri.parse(candidate).host, hostsCsv)) candidate else ""
     }
 
     /**
@@ -77,8 +91,16 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
      * gates, load it straight into the WebView on every idle timeout.
      */
     private fun returnToVenue() {
-        val venue = safeStoredUrl(Prefs.get(this, Prefs.HOME_URL))
-        if (venue.isNotEmpty()) webView.loadUrl(venue)
+        // Checked against deviceAllowedHosts, not the (possibly client-scoped)
+        // `allowedHosts` — idle timeout while viewing an approved client's
+        // site must fall back to the device's own home, not judge HOME_URL
+        // against that client's narrower scope and wrongly reject it.
+        val venue = safeStoredUrl(Prefs.get(this, Prefs.HOME_URL), deviceAllowedHosts)
+        if (venue.isNotEmpty()) {
+            activeClientCode = null
+            allowedHosts = deviceAllowedHosts
+            webView.loadUrl(venue)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,6 +110,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
             startActivity(Intent(this, EnrollActivity::class.java)); finish(); return
         }
         allowedHosts = Prefs.get(this, Prefs.ALLOWED_HOST)
+        deviceAllowedHosts = allowedHosts
         idleReturnSeconds = Prefs.get(this, Prefs.IDLE_RETURN).toIntOrNull() ?: 0
         displayZoomPercent = Prefs.get(this, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100
 
@@ -228,7 +251,12 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     override fun onReload() { webView.reload() }
     override fun onSetUrl(url: String) {
         val host = android.net.Uri.parse(url).host ?: ""
-        if (hostAllowed(host)) {
+        // Checked against deviceAllowedHosts: a remote set_url always targets
+        // the device's own home, never a client's scope, even if a client's
+        // site happens to be on screen (and thus `allowedHosts`) right now.
+        if (hostAllowed(host, deviceAllowedHosts)) {
+            activeClientCode = null
+            allowedHosts = deviceAllowedHosts
             Prefs.set(this, Prefs.HOME_URL, url); webView.loadUrl(url); resetIdleTimer()
         } else toast("כתובת חסומה: מחוץ לדומיינים המורשים")
     }
@@ -274,7 +302,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         agent.uploadScreenshot(commandId, bitmap)
     }
     override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int, zoomPercent: Int) {
-        allowedHosts = host
+        deviceAllowedHosts = host
         idleReturnSeconds = idleSeconds
         val zoomChanged = zoomPercent != displayZoomPercent
         displayZoomPercent = zoomPercent
@@ -287,13 +315,25 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         // put the WebView's very first document load outside the allow-list
         // this same call just installed.
         if (homeUrl.isNotEmpty()) {
+            // A pushed home-link change always means "go back to the device's
+            // own home" — exit whatever client scope (if any) was active, the
+            // same as onSetUrl/returnToVenue already do for their own
+            // navigations back to the baseline.
+            activeClientCode = null
+            allowedHosts = host
             if (hostAllowed(android.net.Uri.parse(homeUrl).host)) webView.loadUrl(homeUrl)
             else toast("קישור חסום: מחוץ לדומיינים המורשים")
             // A navigation above already re-applies zoom via onPageFinished.
-        } else if (zoomChanged) {
-            // No navigation to carry onPageFinished's applyZoom() call — the
-            // currently-loaded page needs it applied directly instead.
-            applyZoom(webView)
+        } else {
+            // No home-link change, so no navigation — a client, if one is
+            // active, stays on screen and keeps its own scope; only the
+            // device's baseline (used once the operator returns home) updates.
+            if (activeClientCode == null) allowedHosts = host
+            if (zoomChanged) {
+                // No navigation to carry onPageFinished's applyZoom() call —
+                // the currently-loaded page needs it applied directly instead.
+                applyZoom(webView)
+            }
         }
         resetIdleTimer()
     }
@@ -310,7 +350,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     }
     private fun removeOverlay() = runOnUiThread { overlay?.visibility = View.GONE }
 
-    // ── Hidden maintenance entry ────────────────────────────────
+    // ── Hidden maintenance entry / customer selection (KIOSK_BUILD.md §4, §2★ה) ──
     private fun setupTouchInterceptor() {
         webView.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
@@ -325,8 +365,76 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         tapResetRunnable?.let { mainHandler.removeCallbacks(it) }
         tapResetRunnable = Runnable { cornerTapCount = 0 }
         mainHandler.postDelayed(tapResetRunnable!!, TAP_RESET_DELAY_MS)
-        if (cornerTapCount >= CORNER_TAPS_REQUIRED) { cornerTapCount = 0; showAdminDialog() }
+        if (cornerTapCount >= CORNER_TAPS_REQUIRED) { cornerTapCount = 0; showSelectionDialog() }
     }
+
+    /**
+     * KIOSK_BUILD.md §4/§2★ה: the corner-tap gesture always opens this first —
+     * switching to the device's own home, or to any owner-approved client, is
+     * the "no rights beyond what was already granted" action the spec says
+     * needs no password. Only "⚙️ ניהול מכשיר" hands off to the unchanged,
+     * code-gated showAdminDialog() below — that stays the sole path to a real
+     * exit/settings change.
+     */
+    private fun showSelectionDialog() {
+        val clients = try {
+            val arr = JSONArray(Prefs.get(this, Prefs.APPROVED_CLIENTS, "[]"))
+            (0 until arr.length()).map { arr.getJSONObject(it) }
+        } catch (e: Exception) { emptyList() }
+
+        // CharSequence, not String: setItems()'s Java signature takes
+        // CharSequence[] — building the list as that element type up front
+        // avoids relying on Kotlin's Java-array-covariance interop for what
+        // toTypedArray() would otherwise infer as Array<String>.
+        val items = mutableListOf<CharSequence>("🏠 עמוד הבית")
+        items.addAll(clients.map { it.optString("name") })
+        items.add("⚙️ ניהול מכשיר")
+        val adminIndex = items.size - 1
+
+        AlertDialog.Builder(this).setTitle("בחירה")
+            .setItems(items.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> switchToHome()
+                    adminIndex -> showAdminDialog()
+                    else -> switchToClient(clients[which - 1])
+                }
+            }
+            .setNegativeButton("ביטול", null).show()
+    }
+
+    private fun switchToHome() {
+        activeClientCode = null
+        allowedHosts = deviceAllowedHosts
+        val venue = safeStoredUrl(Prefs.get(this, Prefs.HOME_URL), deviceAllowedHosts)
+        webView.loadUrl(venue.ifEmpty { "about:blank" })
+        resetIdleTimer()
+    }
+
+    /**
+     * A tap-to-select item, not a typed-code field: every candidate here
+     * already came down in `approvedClients` (server-validated against this
+     * exact device, cached for offline use), so there is no "code not found"
+     * input to parse and no need for a second, network-dependent lookup
+     * through KIOSK_BUILD.md §2★ז's `/api/agent/identify` — the device only
+     * ever needs the entry it was already handed.
+     */
+    private fun switchToClient(client: JSONObject) {
+        val url = client.optString("url")
+        val hosts = client.optString("allowedHost")
+        val host = try { android.net.Uri.parse(url).host } catch (e: Exception) { null }
+        // Unlike hostAllowed()'s own default (fail-open when a scope is
+        // unset — correct for a device baseline an owner may legitimately
+        // leave wide open), an empty scope here is treated as blocked: a
+        // client is a second, separate site the operator is about to be
+        // locked into, and a missing scope must never silently mean "allow
+        // anything" for that switch.
+        if (hosts.isEmpty() || !hostAllowed(host, hosts)) { toast("קישור הלקוח חסום או לא תקין"); return }
+        activeClientCode = client.optString("code")
+        allowedHosts = hosts
+        webView.loadUrl(url)
+        resetIdleTimer()
+    }
+
     private fun showAdminDialog() {
         val code = Prefs.get(this, Prefs.ADMIN_CODE)
         if (code.isEmpty()) { toast("קוד תחזוקה לא הוגדר. השתמשו בפקודת פתיחה מרחוק."); return }

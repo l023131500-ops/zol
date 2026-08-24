@@ -170,10 +170,21 @@ export function logEvent(deviceId, userId, type, detail) {
  * shows on its own selection screen (KIOSK_BUILD.md §2★ה: this must work
  * fully offline, so everything the device needs — code, name, url — travels
  * in one payload, not just a pointer it would have to look up again later).
+ *
+ * `allowed_host` (aliased `allowedHost`) is included for the same reason:
+ * a client's own site is very often on a different domain than the device's
+ * `home_url`, so the device's own `allowed_host` does not cover it — without
+ * this, switching to a client would load its first page fine (the on-device
+ * navigator does not gate a direct load) but block every in-page link/redirect
+ * on that same site the instant one fires, since `hostAllowed()` would be
+ * checking the wrong scope. `clients` always has this populated (routes/
+ * clients.js's INSERT runs every URL through `hostsForUrl`, which folds in
+ * the URL's own host at minimum), so there is no empty-scope case here to
+ * additionally guard against.
  */
 export function approvedClientsForDevice(deviceId) {
   return db.prepare(
-    `SELECT c.code, c.name, c.url FROM device_clients dc
+    `SELECT c.code, c.name, c.url, c.allowed_host AS allowedHost FROM device_clients dc
      JOIN clients c ON c.id = dc.client_id
      WHERE dc.device_id = ? ORDER BY c.name`
   ).all(deviceId);
