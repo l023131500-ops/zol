@@ -417,6 +417,13 @@ async function createEnrollment() {
   const linkId = $('#e-link') ? ($('#e-link').value || null) : null;
   const idleReturnSeconds = Math.max(0, Number($('#e-idle').value) || 0);
   if (!linkId && !homeUrl) return toast('בחרו קישור מהספרייה או הזינו כתובת אתר', false);
+  // The fields are only cleared on success, below — without a guard here a
+  // second click while the first /enrollments call is still in flight reads
+  // the same still-filled form and mints a second, independent code (each
+  // enrollment's `code` is unique, but that does not stop two rows for one
+  // intended device).
+  const btn = $('#e-create');
+  btn.disabled = true;
   try {
     const body = linkId ? { linkId: Number(linkId), name, idleReturnSeconds } : { homeUrl, name, idleReturnSeconds };
     const { enrollment } = await api('/enrollments', { method: 'POST', body: JSON.stringify(body) });
@@ -426,6 +433,7 @@ async function createEnrollment() {
     $('#e-url').value = ''; $('#e-name').value = '';
     loadEnrollments();
   } catch (e) { toast(e.message, false); }
+  finally { btn.disabled = false; }
 }
 async function loadEnrollments() {
   const { enrollments } = await api('/enrollments');
@@ -453,9 +461,15 @@ async function viewLinks() {
   $('#l-create').onclick = async () => {
     const name = $('#l-name').value.trim(), url = $('#l-url').value.trim(), allowedHost = linkHl.value();
     if (!name || !url) return toast('נא למלא שם וכתובת', false);
+    // Unlike enrollments, a link has no unique constraint at all — a second
+    // click while the first POST /links is in flight creates a duplicate row
+    // with nothing anywhere to reject it.
+    const btn = $('#l-create');
+    btn.disabled = true;
     try { await api('/links', { method: 'POST', body: JSON.stringify({ name, url, allowedHost }) });
       toast('הקישור נשמר'); $('#l-name').value = ''; $('#l-url').value = ''; loadLinks(); }
     catch (e) { toast(e.message, false); }
+    finally { btn.disabled = false; }
   };
   loadLinks();
 }
@@ -528,6 +542,13 @@ function userModal(u) {
     <div class="row"><button class="btn btn-primary" id="u-save">שמירה</button><button class="btn btn-light" id="u-cancel">ביטול</button></div>`);
   $('#u-cancel', m).onclick = () => m.remove();
   $('#u-save', m).onclick = async () => {
+    // `username` is UNIQUE, so a double-submit on create cannot silently
+    // duplicate the account — but it does fire a second POST that fails on
+    // the constraint and surfaces as a confusing error toast. Guarded the
+    // same way as the two creates above, on both branches since the button
+    // is shared and the edit branch is a harmless repeat either way.
+    const btn = $('#u-save', m);
+    btn.disabled = true;
     try {
       if (isEdit) {
         await api('/admin/users/' + u.id, { method: 'PATCH', body: JSON.stringify({ fullName: $('#u-name', m).value, deviceLimit: Number($('#u-limit', m).value), active: Number($('#u-active', m).value) }) });
@@ -536,6 +557,7 @@ function userModal(u) {
       }
       toast('נשמר'); m.remove(); loadUsers();
     } catch (e) { toast(e.message, false); }
+    finally { btn.disabled = false; }
   };
 }
 function resetPw(id) {
