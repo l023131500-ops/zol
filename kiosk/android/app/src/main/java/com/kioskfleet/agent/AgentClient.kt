@@ -125,6 +125,12 @@ class AgentClient(
             json.optJSONObject("config")?.let { cfg ->
                 val home = cfg.optString("homeUrl"); val host = cfg.optString("allowedHost")
                 val idle = cfg.optInt("idleReturnSeconds", 0)
+                // Independent of the homeUrl gate below: the maintenance code
+                // has to keep landing even on a heartbeat that carries no new
+                // home link, or a code set after enrollment never reaches a
+                // device whose home link never changes again.
+                val adminCode = cfg.optString("adminCode", Prefs.get(ctx, Prefs.ADMIN_CODE))
+                if (adminCode != Prefs.get(ctx, Prefs.ADMIN_CODE)) Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
                 if (home.isNotEmpty()) {
                     val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
                         host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
@@ -162,9 +168,11 @@ class AgentClient(
                     val host = payload.optString("allowedHost", Prefs.get(ctx, Prefs.ALLOWED_HOST))
                     val idle = payload.optInt("idleReturnSeconds",
                         Prefs.get(ctx, Prefs.IDLE_RETURN).toIntOrNull() ?: 0)
+                    val adminCode = payload.optString("adminCode", Prefs.get(ctx, Prefs.ADMIN_CODE))
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
+                    Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
                     ui.post { handler.onConfigUpdated(home, host, idle) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }

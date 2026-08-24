@@ -13,6 +13,7 @@ const ROW = {
   allowed_host: 'example.com', home_url: 'https://example.com', idle_return_seconds: 30,
   status: 'ok', online: 1, last_seen: '2026-08-24T00:00:00Z', app_version: '1.0.0',
   battery: 88, model: 'Pixel', android_ver: '13', ip: '1.2.3.4', created_at: '2026-01-01T00:00:00Z',
+  exit_code: 'sunset7',
 };
 
 test('device_token never survives the merge into a console frame', () => {

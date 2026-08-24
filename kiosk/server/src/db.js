@@ -114,6 +114,10 @@ function ensureColumn(table, column, ddl) {
 }
 ensureColumn('devices', 'idle_return_seconds', 'idle_return_seconds INTEGER NOT NULL DEFAULT 0');
 ensureColumn('enrollments', 'idle_return_seconds', 'idle_return_seconds INTEGER NOT NULL DEFAULT 0');
+// Local maintenance/exit code for KioskActivity's corner-tap dialog. NULL on
+// every existing row, which is the honest value: no code was ever set,
+// exactly the state that has left that dialog unusable since it was written.
+ensureColumn('devices', 'exit_code', 'exit_code TEXT');
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(

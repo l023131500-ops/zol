@@ -89,6 +89,10 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       id: device.id, name: device.name, serial: device.serial,
       homeUrl: device.home_url, allowedHost: device.allowed_host,
       idleReturnSeconds: device.idle_return_seconds,
+      // Enrollment is the last moment before the device locks, and the first
+      // heartbeat may come after it — so the maintenance code has to land
+      // here too, not only on the heartbeat/update_config paths.
+      adminCode: device.exit_code || '',
     },
   });
 });
@@ -122,6 +126,7 @@ router.post('/heartbeat', (req, res) => {
     config: {
       homeUrl: fresh.home_url, allowedHost: fresh.allowed_host,
       name: fresh.name, idleReturnSeconds: fresh.idle_return_seconds,
+      adminCode: fresh.exit_code || '',
     },
     commands,
   });

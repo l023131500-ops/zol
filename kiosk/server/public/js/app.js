@@ -281,7 +281,8 @@ function mapDevice(d) {
     online: d.online === 1 || d.online === true, status: d.status, homeUrl: d.home_url || d.homeUrl,
     allowedHost: d.allowed_host || d.allowedHost, idleReturnSeconds: d.idle_return_seconds ?? d.idleReturnSeconds ?? 0,
     lastSeen: d.last_seen || d.lastSeen,
-    battery: d.battery, model: d.model, appVersion: d.app_version || d.appVersion, ip: d.ip };
+    battery: d.battery, model: d.model, appVersion: d.app_version || d.appVersion, ip: d.ip,
+    exitCode: d.exit_code || d.exitCode || '' };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -377,6 +378,10 @@ async function editDevice(d) {
     <div class="field"><label>קישור האירוע/אולם (Home URL)</label><input id="h" value="${esc(d.homeUrl || '')}" dir="ltr" /></div>
     <div class="field"><label>דומיינים מותרים לפתיחה במכשיר</label><div id="hl"></div></div>
     <div class="field"><label>חזרה אוטומטית לקישור לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="idle" type="number" min="0" value="${d.idleReturnSeconds || 0}" dir="ltr" /></div>
+    <div class="field"><label>קוד תחזוקה מקומי (5 הקשות בפינת המסך)</label>
+      <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:-8px">
+        לפחות 4 תווים, לא רצף ולא תו חוזר (למשל 1234 או 1111). השאירו ריק כדי לבטל.</div>
     <div class="row"><button class="btn btn-primary" id="s">שמירה</button><button class="btn btn-light" id="c">ביטול</button></div>`);
 
   let homeHost = '';
@@ -386,7 +391,7 @@ async function editDevice(d) {
   $('#s', m).onclick = async () => {
     // Adopt a domain that was typed but not added, rather than dropping it.
     if (!hl.commitPending()) return;
-    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value) };
+    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }

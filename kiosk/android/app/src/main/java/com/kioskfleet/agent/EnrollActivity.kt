@@ -121,6 +121,7 @@ class EnrollActivity : AppCompatActivity() {
             Prefs.set(this, Prefs.IDLE_RETURN, dev.optInt("idleReturnSeconds", 0).toString())
             Prefs.set(this, Prefs.DEVICE_NAME, dev.optString("name"))
             Prefs.set(this, Prefs.LAST_URL, dev.optString("homeUrl"))
+            Prefs.set(this, Prefs.ADMIN_CODE, dev.optString("adminCode"))
             null
         } catch (e: Exception) {
             "שגיאת רשת: ${e.message}"
