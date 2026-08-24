@@ -58,6 +58,13 @@ export const config = {
   alertOfflineMinutes: Number(process.env.ALERT_OFFLINE_MINUTES || 15),
   lowBatteryPercent: Number(process.env.LOW_BATTERY_PERCENT || 15),
   exitAttemptWindowHours: Number(process.env.EXIT_ATTEMPT_WINDOW_HOURS || 24),
+  // KIOSK_BUILD.md §0/§8 "watchdog": a single crash/frozen-screen recovery is
+  // the device doing exactly what it should — this is the "an owner should
+  // go look at this kiosk" threshold on top of it. Short window on purpose:
+  // 3 recoveries within an hour is a device that is actually looping, not
+  // one that happened to reboot twice over a slow week.
+  crashLoopWindowHours: Number(process.env.CRASH_LOOP_WINDOW_HOURS || 1),
+  crashLoopThreshold: Number(process.env.CRASH_LOOP_THRESHOLD || 3),
   seedAdminUser: process.env.SEED_ADMIN_USER || 'admin',
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || 'admin1234',
   isProd: process.env.NODE_ENV === 'production',

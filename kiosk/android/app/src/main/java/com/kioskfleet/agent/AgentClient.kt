@@ -335,4 +335,37 @@ class AgentClient(
         val bm = ctx.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager ?: return -1
         return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
     }
+
+    companion object {
+        /**
+         * KIOSK_BUILD.md §0/§8 "watchdog": reports a crash/frozen-screen
+         * recovery (Watchdog.kt) to the server. Static, unlike
+         * reportExitAttempt(), because it has to run from
+         * KioskApp.onCreate() — before any activity (and therefore any
+         * CommandHandler an instance of this class would need) exists — so
+         * it reads Prefs directly instead of an instance's cached
+         * server/token fields. Fire-and-forget, same shape as
+         * reportExitAttempt(): a report that fails to reach the server is a
+         * missed alert, not a broken kiosk.
+         */
+        fun reportWatchdog(ctx: Context, reason: String, detail: String?) {
+            val server = Prefs.get(ctx, Prefs.SERVER_URL).trimEnd('/')
+            val token = Prefs.get(ctx, Prefs.DEVICE_TOKEN)
+            if (server.isEmpty() || token.isEmpty()) return
+            Thread {
+                try {
+                    val body = JSONObject().put("reason", reason)
+                    if (!detail.isNullOrEmpty()) body.put("detail", detail)
+                    val conn = (URL("$server/api/agent/watchdog-report").openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"; doOutput = true
+                        setRequestProperty("Content-Type", "application/json")
+                        setRequestProperty("X-Device-Token", token)
+                        connectTimeout = 8000; readTimeout = 8000
+                    }
+                    OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
+                    conn.responseCode
+                } catch (_: Exception) {}
+            }.start()
+        }
+    }
 }

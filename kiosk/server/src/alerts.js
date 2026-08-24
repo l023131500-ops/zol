@@ -34,18 +34,26 @@ export function validateExitAttemptBody(body) {
   return { valid: true, ok };
 }
 
-/** Counts for the console's alerts badge/summary, from the three already-fetched lists. */
-export function summarizeAlerts({ offlineDevices, lowBatteryDevices, exitAttempts }) {
+/**
+ * Counts for the console's alerts badge/summary. `crashLoopDevices` is
+ * optional (defaults to none) so callers built before KIOSK_BUILD.md §0/§8's
+ * watchdog feature keep working unchanged — it is a `summarizeCrashLoop()`
+ * (watchdog.js) result, already deduped to one entry per unstable device, so
+ * its length is added to the total the same way the other three conditions
+ * are: once per device that triggers it.
+ */
+export function summarizeAlerts({ offlineDevices, lowBatteryDevices, exitAttempts, crashLoopDevices = [] }) {
   const suspiciousExitAttemptCount = exitAttempts.filter((e) => isSuspiciousExitAttempt(e.detail)).length;
   return {
     offlineCount: offlineDevices.length,
     lowBatteryCount: lowBatteryDevices.length,
     exitAttemptCount: exitAttempts.length,
     suspiciousExitAttemptCount,
+    crashLoopCount: crashLoopDevices.length,
     // The badge total counts each device once per condition it triggers (an
     // offline low-battery device is two real facts an owner should see), and
     // only the suspicious exit attempts — a pile of successful, authorized
     // unlocks should not itself look like a problem.
-    total: offlineDevices.length + lowBatteryDevices.length + suspiciousExitAttemptCount,
+    total: offlineDevices.length + lowBatteryDevices.length + suspiciousExitAttemptCount + crashLoopDevices.length,
   };
 }

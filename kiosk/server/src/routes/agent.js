@@ -5,6 +5,7 @@ import { db, logEvent, approvedClientsForDevice } from '../db.js';
 import { notifyConsolesOfDevice } from '../hub.js';
 import { normalizeClientCode } from '../clients.js';
 import { validateExitAttemptBody } from '../alerts.js';
+import { validateWatchdogReportBody } from '../watchdog.js';
 
 // Device-facing API. Auth is by device_token (issued at enrollment), NOT by JWT.
 const router = express.Router();
@@ -237,6 +238,25 @@ router.post('/exit-attempt', (req, res) => {
   const { valid, ok, error } = validateExitAttemptBody(req.body);
   if (!valid) return res.status(400).json({ error });
   logEvent(device.id, null, 'exit_attempt', ok ? 'correct_code' : 'wrong_code');
+  res.json({ ok: true });
+});
+
+/**
+ * POST /api/agent/watchdog-report
+ * Header: X-Device-Token. Body: { reason: 'crash'|'anr_reboot', detail?: string }
+ * KIOSK_BUILD.md §0/§8 "watchdog": the device's own Watchdog.kt recovers
+ * entirely locally — relaunching the launcher activity after an uncaught
+ * exception, or rebooting the device (Device Owner only) when the main
+ * thread stops responding — before it ever reaches the network. This only
+ * records that a recovery happened, the same "device decided, server just
+ * logs it" shape exit-attempt already established above.
+ */
+router.post('/watchdog-report', (req, res) => {
+  const device = deviceFromToken(req);
+  if (!device) return res.status(401).json({ error: 'device token invalid' });
+  const { valid, reason, detail, error } = validateWatchdogReportBody(req.body);
+  if (!valid) return res.status(400).json({ error });
+  logEvent(device.id, null, 'watchdog', detail ? `${reason}: ${detail}` : reason);
   res.json({ ok: true });
 });
 

@@ -47,6 +47,15 @@ test('summarizeAlerts: an empty alert set summarizes to all zeros, not undefined
   const summary = summarizeAlerts({ offlineDevices: [], lowBatteryDevices: [], exitAttempts: [] });
   assert.deepEqual(summary, {
     offlineCount: 0, lowBatteryCount: 0, exitAttemptCount: 0,
-    suspiciousExitAttemptCount: 0, total: 0,
+    suspiciousExitAttemptCount: 0, crashLoopCount: 0, total: 0,
   });
+});
+
+test('summarizeAlerts: crashLoopDevices (KIOSK_BUILD.md §0/§8 watchdog) adds to the count and total', () => {
+  const summary = summarizeAlerts({
+    offlineDevices: [], lowBatteryDevices: [], exitAttempts: [],
+    crashLoopDevices: [{ device_id: 1 }, { device_id: 2 }],
+  });
+  assert.equal(summary.crashLoopCount, 2);
+  assert.equal(summary.total, 2);
 });

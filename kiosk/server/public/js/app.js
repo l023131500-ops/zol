@@ -900,7 +900,7 @@ async function loadAlerts() {
   try { data = await api('/alerts' + (ME.role === 'admin' ? '?all=1' : '')); }
   catch (e) { toast(e.message, false); return; }
   refreshAlertsBadge();
-  const { offlineDevices, lowBatteryDevices, exitAttempts, thresholds } = data;
+  const { offlineDevices, lowBatteryDevices, exitAttempts, crashLoopDevices, thresholds } = data;
   const box = $('#alerts-body'); if (!box) return;
 
   const offlineHtml = !offlineDevices.length
@@ -923,10 +923,21 @@ async function loadAlerts() {
          <td>${formatAlertTime(e.created_at)}</td></tr>`
       ).join('')}</table>`;
 
+  // KIOSK_BUILD.md §0/§8 "watchdog": crashLoopDevices is already the
+  // deduped, threshold-filtered output of summarizeCrashLoop() — nothing
+  // left to compute here, only render.
+  const crashHtml = !crashLoopDevices.length
+    ? `<p style="color:var(--muted);margin:0">אין מכשירים עם קריסות/אתחולי-watchdog חוזרים ב-${thresholds.crashLoopWindowHours} השעות האחרונות.</p>`
+    : `<table><tr><th>מכשיר</th><th>מספר סידורי</th><th>כמות</th><th>אחרון</th></tr>${crashLoopDevices.map((d) =>
+        `<tr><td><b>${esc(d.device_name)}</b></td><td dir="ltr">${esc(d.device_serial)}</td>
+         <td>🔁 ${d.count}</td><td>${formatAlertTime(d.lastAt)}</td></tr>`
+      ).join('')}</table>`;
+
   box.innerHTML = `
     <div class="card"><h3>📡 מכשירים אופליין (מעל ${thresholds.offlineMinutes} דקות)</h3>${offlineHtml}</div>
     <div class="card"><h3>🔋 סוללה נמוכה (מתחת ל-${thresholds.lowBatteryPercent}%)</h3>${batteryHtml}</div>
-    <div class="card"><h3>🚪 ניסיונות יציאה מהקיוסק (${thresholds.exitAttemptWindowHours} שעות אחרונות)</h3>${exitHtml}</div>`;
+    <div class="card"><h3>🚪 ניסיונות יציאה מהקיוסק (${thresholds.exitAttemptWindowHours} שעות אחרונות)</h3>${exitHtml}</div>
+    <div class="card"><h3>🔁 יציבות — קריסות/אתחולים חוזרים (מעל ${thresholds.crashLoopThreshold} ב-${thresholds.crashLoopWindowHours} שעות)</h3>${crashHtml}</div>`;
 }
 
 // ── ANALYTICS (KIOSK_BUILD.md §9 "אנליטיקה: כמה שימושים, זמן ממוצע,

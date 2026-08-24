@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { config } from '../config.js';
 import { summarizeAlerts } from '../alerts.js';
+import { summarizeCrashLoop } from '../watchdog.js';
 
 // KIOSK_BUILD.md §9 "התראות: מכשיר אופליין מעל X, סוללה נמוכה, ניסיון יציאה
 // מהקיוסק" — was entirely unbuilt. Owner-scoped the same way GET /devices
@@ -41,13 +42,29 @@ router.get('/alerts', requireAuth, (req, res) => {
      ORDER BY e.id DESC LIMIT 50`
   ).all(...(all ? [] : [req.user.id]), `-${config.exitAttemptWindowHours} hours`);
 
+  // KIOSK_BUILD.md §0/§8 "watchdog": Watchdog.kt reports a crash or a
+  // frozen-main-thread reboot as a `watchdog` event (routes/agent.js's new
+  // POST /watchdog-report) — grouped here into a per-device crash-loop flag
+  // the same way exitAttempts feeds isSuspiciousExitAttempt above.
+  const watchdogEvents = db.prepare(
+    `SELECT e.id, e.device_id, e.detail, e.created_at,
+            d.name device_name, d.serial device_serial
+     FROM events e JOIN devices d ON d.id = e.device_id
+     WHERE e.type = 'watchdog' ${all ? '' : 'AND d.owner_id = ?'}
+     AND e.created_at >= datetime('now', ?)
+     ORDER BY e.id DESC LIMIT 200`
+  ).all(...(all ? [] : [req.user.id]), `-${config.crashLoopWindowHours} hours`);
+  const crashLoopDevices = summarizeCrashLoop(watchdogEvents, config.crashLoopThreshold);
+
   res.json({
-    offlineDevices, lowBatteryDevices, exitAttempts,
-    summary: summarizeAlerts({ offlineDevices, lowBatteryDevices, exitAttempts }),
+    offlineDevices, lowBatteryDevices, exitAttempts, crashLoopDevices,
+    summary: summarizeAlerts({ offlineDevices, lowBatteryDevices, exitAttempts, crashLoopDevices }),
     thresholds: {
       offlineMinutes: config.alertOfflineMinutes,
       lowBatteryPercent: config.lowBatteryPercent,
       exitAttemptWindowHours: config.exitAttemptWindowHours,
+      crashLoopWindowHours: config.crashLoopWindowHours,
+      crashLoopThreshold: config.crashLoopThreshold,
     },
   });
 });

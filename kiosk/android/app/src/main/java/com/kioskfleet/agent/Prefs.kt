@@ -20,6 +20,12 @@ object Prefs {
     const val SIGNAGE_ENABLED  = "signage_enabled"   // "1"/"0" — KIOSK_BUILD.md §9 digital signage
     const val SIGNAGE_URLS     = "signage_urls"      // newline-separated playlist, same shape as the console's textarea
     const val SIGNAGE_INTERVAL = "signage_interval"  // seconds between rotations
+    // KIOSK_BUILD.md §0/§8 watchdog: a crash/stuck-reboot report Watchdog.kt
+    // could not reach the network from (the process is mid-crash, or about
+    // to reboot) — persisted here so it survives to the next process start
+    // and KioskApp.onCreate() can flush it then. Empty = nothing pending.
+    const val PENDING_WATCHDOG_REASON = "pending_watchdog_reason"
+    const val PENDING_WATCHDOG_DETAIL = "pending_watchdog_detail"
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
