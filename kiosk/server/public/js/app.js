@@ -163,6 +163,15 @@ function closeModals() { $('#modal-root').innerHTML = ''; }
 $('#login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#login-error').classList.add('hidden');
+  // Every other form in this console guards its submit button against a
+  // second click firing a second in-flight request; this is the one every
+  // user hits first, on a touchscreen kiosk console where a double-tap is
+  // the normal way a tap misfires. A second request here does not create a
+  // duplicate row, but it can still race the first: both calls hit the
+  // login rate limiter, and boot() (which replaces this whole view) can run
+  // twice concurrently.
+  const btn = $('#login-submit');
+  btn.disabled = true;
   try {
     const data = await api('/auth/login', { method: 'POST', body: JSON.stringify({ username: $('#login-user').value, password: $('#login-pass').value }) });
     TOKEN = data.token; localStorage.setItem('kf_token', TOKEN);
@@ -170,6 +179,8 @@ $('#login-form').addEventListener('submit', async (e) => {
   } catch (err) {
     $('#login-error').textContent = err.message;
     $('#login-error').classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
   }
 });
 
