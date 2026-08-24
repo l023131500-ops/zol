@@ -102,10 +102,38 @@ CREATE TABLE IF NOT EXISTS events (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- KIOSK_BUILD.md §2★ד: an owner's own registered customers ("מזהה לקוח"),
+-- each with a direct link + branded site. Distinct from 'links' (the owner's
+-- own event/venue library): a client is the two-tier "business owner → their
+-- customers" registry, entered on-device by code rather than picked in the
+-- console.
+CREATE TABLE IF NOT EXISTS clients (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code          TEXT NOT NULL,                   -- short id typed on the device
+  name          TEXT NOT NULL,
+  url           TEXT NOT NULL,                   -- that customer's branded site
+  allowed_host  TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(owner_id, code)
+);
+
+-- Which clients a given device may switch to (§2★ה: "רק מתוך אלה שאישרנו
+-- בניהול לאותו מכשיר") — an owner registering a customer does not by itself
+-- expose that customer on every device.
+CREATE TABLE IF NOT EXISTS device_clients (
+  device_id  INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  client_id  INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (device_id, client_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_devices_owner ON devices(owner_id);
 CREATE INDEX IF NOT EXISTS idx_commands_device ON commands(device_id, status);
 CREATE INDEX IF NOT EXISTS idx_events_device ON events(device_id);
 CREATE INDEX IF NOT EXISTS idx_links_owner ON links(owner_id);
+CREATE INDEX IF NOT EXISTS idx_clients_owner ON clients(owner_id);
+CREATE INDEX IF NOT EXISTS idx_device_clients_device ON device_clients(device_id);
 `);
 
 // ── Lightweight migrations for databases created by earlier versions ──
@@ -135,4 +163,18 @@ export function logEvent(deviceId, userId, type, detail) {
   db.prepare(
     'INSERT INTO events (device_id, user_id, type, detail) VALUES (?, ?, ?, ?)'
   ).run(deviceId ?? null, userId ?? null, type, detail ?? null);
+}
+
+/**
+ * The clients approved for a device, in the same shape a device caches and
+ * shows on its own selection screen (KIOSK_BUILD.md §2★ה: this must work
+ * fully offline, so everything the device needs — code, name, url — travels
+ * in one payload, not just a pointer it would have to look up again later).
+ */
+export function approvedClientsForDevice(deviceId) {
+  return db.prepare(
+    `SELECT c.code, c.name, c.url FROM device_clients dc
+     JOIN clients c ON c.id = dc.client_id
+     WHERE dc.device_id = ? ORDER BY c.name`
+  ).all(deviceId);
 }

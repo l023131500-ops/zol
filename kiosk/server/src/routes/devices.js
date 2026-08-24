@@ -1,12 +1,25 @@
 import express from 'express';
 import { customAlphabet } from 'nanoid';
-import { db, logEvent } from '../db.js';
+import { db, logEvent, approvedClientsForDevice } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { notifyConsolesOfDevice } from '../hub.js';
 import { hostsForUrl, hostAllowed, normalizeHostCsv, parseHosts } from '../hosts.js';
 import { validateExitCode } from '../exitcode.js';
 import { clampZoomPercent } from '../display.js';
+
+// Rebuilt and pushed on every write that can change what a device's own
+// selection screen should offer (KIOSK_BUILD.md §2★ה) — approving/revoking a
+// client, same as editing homeUrl/allowedHost/zoom already does via
+// update_config below. Kept in one place so the command payload's shape
+// cannot drift between the two call sites.
+function pushConfigUpdate(device, userId) {
+  issueCommand(device, 'update_config', {
+    homeUrl: device.home_url, allowedHost: device.allowed_host, idleReturnSeconds: device.idle_return_seconds,
+    adminCode: device.exit_code || '', displayZoomPercent: device.display_zoom_percent,
+    approvedClients: approvedClientsForDevice(device.id),
+  }, userId ?? null);
+}
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -107,14 +120,11 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
   logEvent(device.id, req.user.id, 'config_update', null);
   notifyConsolesOfDevice(fresh, {});
   // Tell the device to re-pull its config (URL, hosts, idle-return, admin
-  // code, zoom) live. adminCode/displayZoomPercent are sent on every
-  // update_config, not only when they changed here — the same command
-  // already carries the other fields unconditionally, and the agent only
-  // ever writes what it is sent.
-  issueCommand(fresh, 'update_config', {
-    homeUrl: fresh.home_url, allowedHost: fresh.allowed_host, idleReturnSeconds: fresh.idle_return_seconds,
-    adminCode: fresh.exit_code || '', displayZoomPercent: fresh.display_zoom_percent,
-  }, req.user.id);
+  // code, zoom, approved clients) live. Every field is sent on every
+  // update_config, not only when it changed here — the same command already
+  // carries the other fields unconditionally, and the agent only ever writes
+  // what it is sent.
+  pushConfigUpdate(fresh, req.user.id);
   res.json({ device: publicDevice(fresh) });
 });
 
@@ -126,6 +136,47 @@ router.get('/devices/:id/screenshot', requireAuth, (req, res) => {
   if (error) return res.sendStatus(error);
   if (!device.last_screenshot) return res.sendStatus(404);
   res.json({ image: device.last_screenshot, takenAt: device.last_screenshot_at });
+});
+
+// ── Client approvals (KIOSK_BUILD.md §2★ד/ה) ──────────────────────
+// Which of the owner's registered customers this device may switch to
+// on-device. Listing merges the owner's whole client directory with this
+// device's approvals so the console can render one checklist rather than the
+// caller diffing two separate lists.
+router.get('/devices/:id/clients', requireAuth, (req, res) => {
+  const { device, error } = getOwnedDevice(req, req.params.id);
+  if (error) return res.sendStatus(error);
+  const rows = db.prepare(
+    `SELECT c.id, c.code, c.name, c.url, (dc.device_id IS NOT NULL) approved
+     FROM clients c LEFT JOIN device_clients dc ON dc.client_id = c.id AND dc.device_id = ?
+     WHERE c.owner_id = ? ORDER BY c.name`
+  ).all(device.id, device.owner_id);
+  res.json({ clients: rows.map((r) => ({ id: r.id, code: r.code, name: r.name, url: r.url, approved: !!r.approved })) });
+});
+
+router.post('/devices/:id/clients/:clientId', requireAuth, (req, res) => {
+  const { device, error } = getOwnedDevice(req, req.params.id);
+  if (error) return res.sendStatus(error);
+  // A client id belongs to the same owner as the device, never borrowed
+  // across accounts — same ownership boundary getOwnedDevice already
+  // enforces for the device itself.
+  const client = db.prepare('SELECT * FROM clients WHERE id = ? AND owner_id = ?').get(req.params.clientId, device.owner_id);
+  if (!client) return res.sendStatus(404);
+  db.prepare('INSERT OR IGNORE INTO device_clients (device_id, client_id) VALUES (?, ?)').run(device.id, client.id);
+  logEvent(device.id, req.user.id, 'client_approved', client.code);
+  pushConfigUpdate(device, req.user.id);
+  res.json({ ok: true });
+});
+
+router.delete('/devices/:id/clients/:clientId', requireAuth, (req, res) => {
+  const { device, error } = getOwnedDevice(req, req.params.id);
+  if (error) return res.sendStatus(error);
+  const info = db.prepare('DELETE FROM device_clients WHERE device_id = ? AND client_id = ?').run(device.id, req.params.clientId);
+  if (info.changes) {
+    logEvent(device.id, req.user.id, 'client_revoked', String(req.params.clientId));
+    pushConfigUpdate(device, req.user.id);
+  }
+  res.json({ ok: true });
 });
 
 router.delete('/devices/:id', requireAuth, (req, res) => {

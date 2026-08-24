@@ -1,8 +1,9 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { customAlphabet } from 'nanoid';
-import { db, logEvent } from '../db.js';
+import { db, logEvent, approvedClientsForDevice } from '../db.js';
 import { notifyConsolesOfDevice } from '../hub.js';
+import { normalizeClientCode } from '../clients.js';
 
 // Device-facing API. Auth is by device_token (issued at enrollment), NOT by JWT.
 const router = express.Router();
@@ -94,6 +95,11 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       // here too, not only on the heartbeat/update_config paths.
       adminCode: device.exit_code || '',
       displayZoomPercent: device.display_zoom_percent,
+      // §2★ה requires the on-device selection screen to work fully offline,
+      // so the approved-customers list (empty at first enrollment, filled in
+      // once the owner approves some in the console) travels here too rather
+      // than needing a separate online lookup before it can be shown.
+      approvedClients: approvedClientsForDevice(device.id),
     },
   });
 });
@@ -128,9 +134,37 @@ router.post('/heartbeat', (req, res) => {
       homeUrl: fresh.home_url, allowedHost: fresh.allowed_host,
       name: fresh.name, idleReturnSeconds: fresh.idle_return_seconds,
       adminCode: fresh.exit_code || '', displayZoomPercent: fresh.display_zoom_percent,
+      approvedClients: approvedClientsForDevice(fresh.id),
     },
     commands,
   });
+});
+
+/**
+ * POST /api/agent/identify
+ * Header: X-Device-Token. Body: { code }
+ * KIOSK_BUILD.md §2★ז's `IdentifyDevice`: given a client id typed on the
+ * device, resolve it to that customer's branded site — but only if the
+ * owner approved this exact client for this exact device (§2★ה), so a code
+ * belonging to a different customer of the same owner (or a stale one an
+ * owner has since revoked) does not open on a device it was never granted
+ * on. Scoped by device.owner_id, not global: two owners may each register
+ * their own "1" without collision, the same per-owner uniqueness `clients`
+ * already enforces at the database level.
+ */
+router.post('/identify', (req, res) => {
+  const device = deviceFromToken(req);
+  if (!device) return res.status(401).json({ error: 'device token invalid' });
+  const code = normalizeClientCode(req.body?.code);
+  if (!code) return res.status(400).json({ error: 'קוד לקוח לא תקין' });
+  const client = db.prepare(
+    `SELECT c.code, c.name, c.url FROM clients c
+     JOIN device_clients dc ON dc.client_id = c.id AND dc.device_id = ?
+     WHERE c.owner_id = ? AND c.code = ?`
+  ).get(device.id, device.owner_id, code);
+  if (!client) return res.status(404).json({ error: 'קוד לקוח לא מזוהה או לא מאושר למכשיר זה' });
+  logEvent(device.id, null, 'client_identified', code);
+  res.json({ client });
 });
 
 // Accepts only a data URL with an image MIME type: this string is later

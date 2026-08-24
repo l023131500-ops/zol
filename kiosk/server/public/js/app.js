@@ -299,7 +299,7 @@ $('#menu').addEventListener('click', (e) => {
 function route(view) {
   CURRENT = view;
   [...$('#menu').children].forEach((a) => a.classList.toggle('active', a.dataset.view === view));
-  ({ devices: viewDevices, links: viewLinks, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
+  ({ devices: viewDevices, links: viewLinks, clients: viewClients, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
 }
 
 // Cache of the customer's link library (used by enroll + edit selectors).
@@ -399,12 +399,15 @@ async function editDevice(d) {
       <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
       <div style="font-size:12px;color:var(--muted);margin-top:-8px">
         לפחות 4 תווים, לא רצף ולא תו חוזר (למשל 1234 או 1111). השאירו ריק כדי לבטל.</div>
+    <div class="field"><label>לקוחות מאושרים למכשיר זה (§2★ה — הזנת המזהה במכשיר תפתח רק את אלה)</label>
+      <div id="cl-approve">טוען…</div></div>
     <div class="row"><button class="btn btn-primary" id="s">שמירה</button><button class="btn btn-light" id="c">ביטול</button></div>`);
 
   let homeHost = '';
   try { homeHost = new URL(d.homeUrl).host; } catch { /* no home URL yet */ }
   const hl = hostListEditor($('#hl', m), d.allowedHost, homeHost);
   $('#zoom', m).oninput = (e) => { $('#zoom-val', m).textContent = `${e.target.value}%`; };
+  loadDeviceClients(d, m);
 
   $('#s', m).onclick = async () => {
     // Adopt a domain that was typed but not added, rather than dropping it.
@@ -416,6 +419,33 @@ async function editDevice(d) {
     catch (e) { toast(e.message, false); }
   };
   $('#c', m).onclick = () => m.remove();
+}
+// Toggled immediately on click (POST/DELETE per checkbox), not batched into
+// the modal's "שמירה" — the same "act now, don't wait for a separate save"
+// shape the screenshot/command buttons on the device card already use, and
+// it means closing the modal with "ביטול" can never discard an approval
+// change that already reached the server.
+async function loadDeviceClients(d, m) {
+  const box = $('#cl-approve', m); if (!box) return;
+  let clients;
+  try { ({ clients } = await api(`/devices/${d.id}/clients`)); }
+  catch (e) { box.innerHTML = `<p style="color:#b91c1c;font-size:13px;margin:0">${esc(e.message)}</p>`; return; }
+  if (!clients.length) {
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px;margin:0">אין עדיין לקוחות רשומים. הוסיפו ב"לקוחות" בתפריט.</p>';
+    return;
+  }
+  box.innerHTML = clients.map((c) => `<label style="display:flex;align-items:center;gap:8px;padding:4px 0">
+    <input type="checkbox" data-client="${c.id}" ${c.approved ? 'checked' : ''} />
+    <span class="code-chip" dir="ltr" style="font-size:12px">${esc(c.code)}</span> ${esc(c.name)}</label>`).join('');
+  box.querySelectorAll('[data-client]').forEach((cb) => {
+    cb.onchange = async () => {
+      cb.disabled = true;
+      try {
+        await api(`/devices/${d.id}/clients/${cb.dataset.client}`, { method: cb.checked ? 'POST' : 'DELETE' });
+      } catch (e) { cb.checked = !cb.checked; toast(e.message, false); }
+      finally { cb.disabled = false; }
+    };
+  });
 }
 function confirmDelete(d) {
   const m = modal(`<h3>מחיקת מכשיר</h3><p style="color:var(--muted)">"${esc(d.name)}" יוסר מהמערכת. פעולה זו אינה הפיכה.</p>
@@ -516,6 +546,50 @@ async function loadLinks() {
       <td dir="ltr" style="font-size:12px;color:var(--muted)">${esc(l.allowed_host || '')}</td>
       <td><button class="btn btn-danger btn-sm" data-del="${l.id}">מחק</button></td></tr>`).join('') + '</table>';
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/links/' + b.dataset.del, { method: 'DELETE' }); loadLinks(); });
+}
+
+// ── CLIENT DIRECTORY (KIOSK_BUILD.md §2★ד) ─────────────────────────
+// The owner's own registered customers: a short id typed on a locked
+// device, resolving to that customer's branded site. Separate from the
+// "ספריית קישורים" library above — a link is an event/venue picked in this
+// console; a client is entered by code on the device itself, and only opens
+// on a device this console has explicitly approved it for (§2★ה, below in
+// editDevice()).
+async function viewClients() {
+  $('#content').innerHTML = `<div class="topbar"><h1>לקוחות</h1></div>
+    <p style="color:var(--muted);max-width:680px">כאן רושמים את הלקוחות של העסק: לכל לקוח מזהה קצר + אתר משלו.
+      במכשיר, הזנת המזהה פותחת את האתר של אותו לקוח — רק במכשירים שאישרתם לו למטה בעריכת המכשיר.</p>
+    <div class="card" style="max-width:680px">
+      <h3>לקוח חדש</h3>
+      <div class="field"><label>מזהה לקוח (יוקלד במכשיר)</label><input id="cl-code" placeholder="למשל: 7 או HALL7" dir="ltr" /></div>
+      <div class="field"><label>שם הלקוח</label><input id="cl-name" placeholder="למשל: משפחת כהן" /></div>
+      <div class="field"><label>כתובת אתר התדמית של הלקוח</label><input id="cl-url" placeholder="https://example.com/client/7" dir="ltr" /></div>
+      <div class="field"><label>דומיינים נוספים מותרים</label><div id="cl-hl"></div></div>
+      <button class="btn btn-primary" id="cl-create">שמור לקוח</button>
+    </div>
+    <div class="card" style="max-width:680px"><h3>הלקוחות שלי</h3><div id="cl-list">טוען…</div></div>`;
+  const clientHl = hostListEditor($('#cl-hl'), '', '');
+  $('#cl-create').onclick = async () => {
+    const code = $('#cl-code').value.trim(), name = $('#cl-name').value.trim(), url = $('#cl-url').value.trim(), allowedHost = clientHl.value();
+    if (!code || !name || !url) return toast('נא למלא מזהה, שם וכתובת', false);
+    const btn = $('#cl-create');
+    btn.disabled = true;
+    try { await api('/clients', { method: 'POST', body: JSON.stringify({ code, name, url, allowedHost }) });
+      toast('הלקוח נשמר'); $('#cl-code').value = ''; $('#cl-name').value = ''; $('#cl-url').value = ''; loadClients(); }
+    catch (e) { toast(e.message, false); }
+    finally { btn.disabled = false; }
+  };
+  loadClients();
+}
+async function loadClients() {
+  const { clients } = await api('/clients');
+  const box = $('#cl-list'); if (!box) return;
+  if (!clients.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין עדיין לקוחות.</p>'; return; }
+  box.innerHTML = '<table><tr><th>מזהה</th><th>שם</th><th>כתובת</th><th></th></tr>' +
+    clients.map((c) => `<tr><td><span class="code-chip" dir="ltr">${esc(c.code)}</span></td><td>${esc(c.name)}</td>
+      <td dir="ltr" style="font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis">${esc(c.url)}</td>
+      <td><button class="btn btn-danger btn-sm" data-del="${c.id}">מחק</button></td></tr>`).join('') + '</table>';
+  box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/clients/' + b.dataset.del, { method: 'DELETE' }); loadClients(); });
 }
 
 // ── SETTINGS ────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import { attachHub } from './hub.js';
 import authRoutes from './routes/auth.js';
 import deviceRoutes from './routes/devices.js';
 import linkRoutes from './routes/links.js';
+import clientRoutes from './routes/clients.js';
 import adminRoutes from './routes/admin.js';
 import agentRoutes from './routes/agent.js';
 
@@ -103,6 +104,7 @@ site.get('/api/config', (req, res) =>
 site.use('/api/auth', authRoutes);
 site.use('/api', deviceRoutes);
 site.use('/api', linkRoutes);
+site.use('/api', clientRoutes);
 site.use('/api/admin', adminRoutes);
 site.use('/api/agent', agentRoutes);
 
