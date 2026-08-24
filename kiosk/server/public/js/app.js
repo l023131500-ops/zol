@@ -350,9 +350,55 @@ function deviceCard(d) {
   mk('🧹 נקה מטמון', () => cmd(d, 'clear_cache'));
   mk('📸 צילום מסך', () => cmd(d, 'screenshot'));
   if (d.lastScreenshotAt) mk('🖼️ צילום אחרון', () => viewScreenshot(d));
+  mk('📋 יומן', () => viewDeviceLog(d));
   mk('✏️ עריכה', () => editDevice(d));
   mk('🗑️', () => confirmDelete(d), 'btn-danger');
   return c;
+}
+
+// ── DEVICE ACTIVITY LOG (KIOSK_BUILD.md §9 "יומן אירועים לכל מכשיר") ────
+//
+// GET /devices/:id already returns `events` (last 30) and `commands` (last
+// 20) — the fleet-management audit trail the spec asks for — but nothing in
+// the console ever called that endpoint or rendered them; the only way to see
+// them was a raw HTTP request. This is the surface for that data, read-only.
+const EVENT_LABELS = {
+  command: 'פקודה נשלחה', command_ack: 'תגובת מכשיר לפקודה', connected: 'המכשיר התחבר',
+  enrolled: 'המכשיר נרשם', config_update: 'הגדרות עודכנו', screenshot: 'צילום מסך נלכד',
+  client_identified: 'זוהה לקוח במכשיר', client_approved: 'לקוח אושר למכשיר', client_revoked: 'אישור לקוח בוטל',
+};
+const COMMAND_LABELS = {
+  reboot: 'אתחול', reload: 'רענון', set_url: 'החלפת כתובת', screen_on: 'הדלקת מסך', screen_off: 'כיבוי מסך',
+  clear_cache: 'ניקוי מטמון', lock: 'נעילה', unlock: 'שחרור זמני', screenshot: 'צילום מסך',
+  message: 'הודעה על המסך', update_config: 'עדכון הגדרות',
+};
+const COMMAND_STATUS_LABELS = { pending: 'ממתין', delivered: 'נשלח', done: 'בוצע', failed: 'נכשל' };
+const fmtTime = (t) => (t ? new Date(t + 'Z').toLocaleString('he-IL') : '—');
+
+async function viewDeviceLog(d) {
+  const m = modal(`<h3>יומן פעילות — ${esc(d.name)}</h3><p style="color:var(--muted)">טוען…</p>`);
+  let detail;
+  try { ({ device: detail } = await api(`/devices/${d.id}`)); }
+  catch (e) { m.querySelector('.modal').innerHTML = `<h3>יומן פעילות — ${esc(d.name)}</h3>
+    <p style="color:#b91c1c">${esc(e.message)}</p><div class="row" style="margin-top:12px"><button class="btn btn-light" id="c">סגירה</button></div>`;
+    $('#c', m).onclick = () => m.remove(); return; }
+
+  const events = detail.events || [];
+  const commands = detail.commands || [];
+  const eventsHtml = events.length
+    ? '<table><tr><th>אירוע</th><th>פרטים</th><th>מתי</th></tr>' + events.map((ev) =>
+        `<tr><td>${esc(EVENT_LABELS[ev.type] || ev.type)}</td><td dir="ltr" style="font-size:12px;color:var(--muted)">${esc(ev.detail || '')}</td><td style="font-size:12px">${fmtTime(ev.created_at)}</td></tr>`).join('') + '</table>'
+    : '<p style="color:var(--muted);margin:0">אין עדיין אירועים.</p>';
+  const commandsHtml = commands.length
+    ? '<table><tr><th>פקודה</th><th>סטטוס</th><th>מתי</th></tr>' + commands.map((c) =>
+        `<tr><td>${esc(COMMAND_LABELS[c.type] || c.type)}</td><td>${esc(COMMAND_STATUS_LABELS[c.status] || c.status)}</td><td style="font-size:12px">${fmtTime(c.created_at)}</td></tr>`).join('') + '</table>'
+    : '<p style="color:var(--muted);margin:0">אין עדיין פקודות.</p>';
+
+  m.querySelector('.modal').innerHTML = `<h3>יומן פעילות — ${esc(d.name)}</h3>
+    <h4 style="margin-bottom:6px">פקודות אחרונות</h4>${commandsHtml}
+    <h4 style="margin:16px 0 6px">אירועים (30 אחרונים)</h4>${eventsHtml}
+    <div class="row" style="margin-top:12px"><button class="btn btn-light" id="c">סגירה</button></div>`;
+  $('#c', m).onclick = () => m.remove();
 }
 async function viewScreenshot(d) {
   const m = modal(`<h3>צילום מסך — ${esc(d.name)}</h3><p style="color:var(--muted)">טוען…</p>`);
