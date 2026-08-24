@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
@@ -226,6 +227,26 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         toast("מצב תחזוקה פעיל ל-$minutes דקות")
     }
     override fun onMessage(text: String) { if (text.isBlank()) removeOverlay() else showOverlay(text) }
+    override fun onScreenshot(commandId: Long) {
+        val bitmap = try {
+            val w = webView.width; val h = webView.height
+            if (w <= 0 || h <= 0) null else {
+                val full = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                webView.draw(android.graphics.Canvas(full))
+                // A full-resolution capture can push the JPEG well past the
+                // server's 1mb JSON body limit; console viewing needs "what's
+                // on screen right now", not print resolution.
+                val maxDim = 720
+                val scale = maxDim.toFloat() / maxOf(w, h)
+                if (scale < 1f) {
+                    val scaled = Bitmap.createScaledBitmap(
+                        full, (w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1), true)
+                    full.recycle(); scaled
+                } else full
+            }
+        } catch (e: Exception) { null }
+        agent.uploadScreenshot(commandId, bitmap)
+    }
     override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int) {
         allowedHosts = host
         idleReturnSeconds = idleSeconds

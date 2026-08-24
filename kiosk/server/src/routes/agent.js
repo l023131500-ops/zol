@@ -132,6 +132,41 @@ router.post('/heartbeat', (req, res) => {
   });
 });
 
+// Accepts only a data URL with an image MIME type: this string is later
+// rendered straight into the console as an <img src="…"> (see viewScreenshot()
+// in public/js/app.js). A device is a semi-trusted party (it holds a real
+// device_token, but "trusted enough to report its own status" is not "trusted
+// enough to put an arbitrary string into another tab's DOM") — the same shape
+// of caution hosts.js already applies to what a human types into the allow-list.
+const SCREENSHOT_RE = /^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/]+=*$/;
+
+/**
+ * POST /api/agent/screenshot
+ * Header: X-Device-Token. Body: { commandId?, image }
+ * Stores the device's latest remote-screenshot capture (KIOSK_BUILD.md's
+ * "צילום מסך מרחוק" remote command). The 1mb express.json() limit already
+ * bounds the upload; AgentClient additionally downscales before encoding so a
+ * real capture fits well under it.
+ */
+router.post('/screenshot', (req, res) => {
+  const device = deviceFromToken(req);
+  if (!device) return res.status(401).json({ error: 'device token invalid' });
+  const { commandId, image } = req.body || {};
+  if (typeof image !== 'string' || !SCREENSHOT_RE.test(image)) {
+    return res.status(400).json({ error: 'invalid image' });
+  }
+  const now = new Date().toISOString();
+  db.prepare('UPDATE devices SET last_screenshot = ?, last_screenshot_at = ? WHERE id = ?').run(image, now, device.id);
+  if (commandId) {
+    db.prepare("UPDATE commands SET status = 'done', result = ?, done_at = datetime('now') WHERE id = ? AND device_id = ?")
+      .run('screenshot saved', commandId, device.id);
+  }
+  logEvent(device.id, null, 'screenshot', null);
+  const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
+  notifyConsolesOfDevice(fresh, {});
+  res.json({ ok: true });
+});
+
 /** POST /api/agent/ack  Body: { commandId, ok, result? } */
 router.post('/ack', (req, res) => {
   const device = deviceFromToken(req);

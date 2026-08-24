@@ -118,6 +118,13 @@ ensureColumn('enrollments', 'idle_return_seconds', 'idle_return_seconds INTEGER 
 // every existing row, which is the honest value: no code was ever set,
 // exactly the state that has left that dialog unusable since it was written.
 ensureColumn('devices', 'exit_code', 'exit_code TEXT');
+// Latest remote screenshot (data URL, base64). Kept off the CONSOLE_DEVICE_FIELDS
+// allow-list in devicepayload.js on purpose — only the timestamp is broadcast
+// live; the image itself is fetched on demand via GET /devices/:id/screenshot,
+// the same "don't push it unless asked" shape as devicepayload.js already
+// documents for device_token.
+ensureColumn('devices', 'last_screenshot', 'last_screenshot TEXT');
+ensureColumn('devices', 'last_screenshot_at', 'last_screenshot_at TEXT');
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(

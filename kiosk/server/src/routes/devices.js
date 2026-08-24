@@ -114,6 +114,16 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
   res.json({ device: publicDevice(fresh) });
 });
 
+// Fetched on demand, not folded into GET /devices or /devices/:id: the image
+// can run to hundreds of KB, and every device-list load paying for it would
+// slow the common case for the sake of the rare "view the screenshot" click.
+router.get('/devices/:id/screenshot', requireAuth, (req, res) => {
+  const { device, error } = getOwnedDevice(req, req.params.id);
+  if (error) return res.sendStatus(error);
+  if (!device.last_screenshot) return res.sendStatus(404);
+  res.json({ image: device.last_screenshot, takenAt: device.last_screenshot_at });
+});
+
 router.delete('/devices/:id', requireAuth, (req, res) => {
   const { device, error } = getOwnedDevice(req, req.params.id);
   if (error) return res.sendStatus(error);
@@ -184,6 +194,7 @@ function publicDevice(d) {
     status: d.status, online: !!d.online,
     lastSeen: d.last_seen, appVersion: d.app_version, battery: d.battery, model: d.model,
     androidVer: d.android_ver, ip: d.ip, createdAt: d.created_at, exitCode: d.exit_code || '',
+    lastScreenshotAt: d.last_screenshot_at || null,
   };
 }
 

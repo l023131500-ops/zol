@@ -13,7 +13,8 @@ const ROW = {
   allowed_host: 'example.com', home_url: 'https://example.com', idle_return_seconds: 30,
   status: 'ok', online: 1, last_seen: '2026-08-24T00:00:00Z', app_version: '1.0.0',
   battery: 88, model: 'Pixel', android_ver: '13', ip: '1.2.3.4', created_at: '2026-01-01T00:00:00Z',
-  exit_code: 'sunset7',
+  exit_code: 'sunset7', last_screenshot: 'data:image/jpeg;base64,/9j/notreallyanimage',
+  last_screenshot_at: '2026-08-24T12:00:00Z',
 };
 
 test('device_token never survives the merge into a console frame', () => {
@@ -45,11 +46,18 @@ test('a field the row does not have stays absent, not undefined', () => {
   assert.equal('owner_name' in out, false);
 });
 
-test('the exact dropped set is device_token, nothing more', () => {
+test('the exact dropped set is device_token and the screenshot image, nothing more', () => {
   const merged = { ...ROW };
   const out = consoleDevice(ROW, {});
   const dropped = Object.keys(merged).filter((k) => !(k in out));
-  assert.deepEqual(dropped, ['device_token']);
+  assert.deepEqual(dropped.sort(), ['device_token', 'last_screenshot']);
+});
+
+test('last_screenshot_at survives so a console knows a capture is ready, but the image itself does not', () => {
+  const out = consoleDevice(ROW, {});
+  assert.equal(out.last_screenshot_at, ROW.last_screenshot_at);
+  assert.equal('last_screenshot' in out, false);
+  assert.equal(JSON.stringify(out).includes('notreallyanimage'), false);
 });
 
 test('a live-status payload key not on the allow-list is dropped too', () => {

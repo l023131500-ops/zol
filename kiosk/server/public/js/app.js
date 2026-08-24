@@ -282,7 +282,8 @@ function mapDevice(d) {
     allowedHost: d.allowed_host || d.allowedHost, idleReturnSeconds: d.idle_return_seconds ?? d.idleReturnSeconds ?? 0,
     lastSeen: d.last_seen || d.lastSeen,
     battery: d.battery, model: d.model, appVersion: d.app_version || d.appVersion, ip: d.ip,
-    exitCode: d.exit_code || d.exitCode || '' };
+    exitCode: d.exit_code || d.exitCode || '',
+    lastScreenshotAt: d.last_screenshot_at || d.lastScreenshotAt || null };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -346,9 +347,22 @@ function deviceCard(d) {
   mk('🌙 כבה מסך', () => cmd(d, 'screen_off'));
   mk('☀️ הדלק מסך', () => cmd(d, 'screen_on'));
   mk('🧹 נקה מטמון', () => cmd(d, 'clear_cache'));
+  mk('📸 צילום מסך', () => cmd(d, 'screenshot'));
+  if (d.lastScreenshotAt) mk('🖼️ צילום אחרון', () => viewScreenshot(d));
   mk('✏️ עריכה', () => editDevice(d));
   mk('🗑️', () => confirmDelete(d), 'btn-danger');
   return c;
+}
+async function viewScreenshot(d) {
+  const m = modal(`<h3>צילום מסך — ${esc(d.name)}</h3><p style="color:var(--muted)">טוען…</p>`);
+  try {
+    const { image, takenAt } = await api(`/devices/${d.id}/screenshot`);
+    m.querySelector('.modal').innerHTML = `<h3>צילום מסך — ${esc(d.name)}</h3>
+      <p style="color:var(--muted);font-size:12px">${takenAt ? new Date(takenAt + 'Z').toLocaleString('he-IL') : ''}</p>
+      <img src="${esc(image)}" alt="צילום מסך של ${esc(d.name)}" style="max-width:100%;border-radius:8px;border:1px solid var(--line)" />
+      <div class="row" style="margin-top:12px"><button class="btn btn-light" id="c">סגירה</button></div>`;
+    $('#c', m).onclick = () => m.remove();
+  } catch (e) { m.remove(); toast(e.message, false); }
 }
 async function cmd(d, type, payload) {
   try { await api(`/devices/${d.id}/command`, { method: 'POST', body: JSON.stringify({ type, payload }) }); toast('הפקודה נשלחה למכשיר'); }

@@ -17,10 +17,17 @@
 // Kept free of every other module's imports so it can be exercised here
 // without better-sqlite3/ws/express, which this checkout does not have
 // installed.
+// `last_screenshot` (the image itself) is deliberately absent: it can run to
+// hundreds of KB, and broadcasting it to every open console on every
+// notifyConsolesOfDevice() call — most of which have nothing to do with a new
+// screenshot — would bloat every live update for the sake of the rare one
+// that needs it. `last_screenshot_at` alone tells a console "one is ready";
+// the image is fetched on demand via GET /devices/:id/screenshot.
 export const CONSOLE_DEVICE_FIELDS = [
   'id', 'owner_id', 'owner_name', 'serial', 'name', 'allowed_host', 'home_url',
   'idle_return_seconds', 'status', 'online', 'last_seen', 'app_version',
   'battery', 'model', 'android_ver', 'ip', 'created_at', 'exit_code',
+  'last_screenshot_at',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */

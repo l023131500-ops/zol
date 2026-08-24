@@ -3,12 +3,15 @@ package com.kioskfleet.agent
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import okhttp3.*
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -25,6 +28,7 @@ interface CommandHandler {
     fun onUnlock(minutes: Int)
     fun onMessage(text: String)
     fun onConfigUpdated(homeUrl: String, allowedHost: String, idleReturnSeconds: Int)
+    fun onScreenshot(commandId: Long)
 }
 
 /**
@@ -151,6 +155,17 @@ class AgentClient(
         val id = cmd.optLong("id", -1)
         val type = cmd.optString("type")
         val payload = cmd.optJSONObject("payload") ?: JSONObject()
+
+        // Async, unlike every other case below: capture happens on the UI
+        // thread and the upload happens on a background one, both inside
+        // onScreenshot()/uploadScreenshot(). Falling through to the
+        // synchronous `ack(id, ok, result)` at the bottom of this function
+        // would report "done" before either has run.
+        if (type == "screenshot") {
+            if (id >= 0) ui.post { handler.onScreenshot(id) }
+            return
+        }
+
         var ok = true
         var result = "ok"
         try {
@@ -211,6 +226,37 @@ class AgentClient(
                 }
                 conn.responseCode
             } catch (_: Exception) {}
+        }.start()
+    }
+
+    /**
+     * Encode and upload a captured frame. Runs off the UI thread (bitmap
+     * compression is not cheap) and reports failure through the normal ack
+     * path — server-side POST /api/agent/screenshot marks the command done
+     * itself on success, so this only acks on the failure branches.
+     */
+    fun uploadScreenshot(commandId: Long, bitmap: Bitmap?) {
+        Thread {
+            if (bitmap == null) { ack(commandId, false, "capture failed"); return@Thread }
+            try {
+                val stream = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 60, stream)
+                val b64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+                val body = JSONObject().put("commandId", commandId)
+                    .put("image", "data:image/jpeg;base64,$b64").toString()
+                val conn = (URL("$server/api/agent/screenshot").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("X-Device-Token", token)
+                    connectTimeout = 15000; readTimeout = 15000
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(body) }
+                if (conn.responseCode !in 200..299) ack(commandId, false, "upload failed (${conn.responseCode})")
+            } catch (e: Exception) {
+                ack(commandId, false, e.message ?: "upload failed")
+            } finally {
+                bitmap.recycle()
+            }
         }.start()
     }
 
