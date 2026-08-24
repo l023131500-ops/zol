@@ -67,6 +67,21 @@ test('the device home URL is always part of its own allow-list', () => {
   assert.ok(parseHosts(hostsForUrl('https://venue.example.com/e/1', '')).includes('venue.example.com'));
 });
 
+test('an explicit allow-list that omits the new home host does not survive the merge', () => {
+  // routes/devices.js PATCH /devices/:id used to skip this merge whenever the
+  // caller supplied allowedHost explicitly, even alongside a new homeUrl —
+  // so a request moving the home URL to a new domain while also passing an
+  // unrelated (or stale) allow-list stored the two as a mismatched pair, and
+  // the device's own agent loads homeUrl unconditionally on update_config.
+  // hostsForUrl(homeUrl, allowedHost) is the merge the route now always runs
+  // in that case: the new home host must come out the other side no matter
+  // how disjoint the caller's list was.
+  const merged = hostsForUrl('https://newvenue.example.com/e/9', 'totally-unrelated-domain.com');
+  assert.ok(parseHosts(merged).includes('newvenue.example.com'));
+  assert.ok(parseHosts(merged).includes('totally-unrelated-domain.com'));
+  assert.equal(hostAllowed('newvenue.example.com', merged), true);
+});
+
 test('every write path normalises, not just the device one', () => {
   // hostsForUrl is the funnel the link library writes through. It used to pass
   // extras straight to storage, so a pasted URL was saved verbatim in the

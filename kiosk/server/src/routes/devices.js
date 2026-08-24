@@ -56,8 +56,18 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
     if (!link) return res.status(400).json({ error: 'הקישור לא נמצא בספרייה' });
     homeUrl = link.url;
     allowedHost = link.allowed_host;
-  } else if (homeUrl && !allowedHost) {
-    allowedHost = hostsForUrl(homeUrl, device.allowed_host);
+  } else if (homeUrl) {
+    // hostsForUrl always folds the *new* home URL's own host into the result
+    // — even when the caller also supplied an explicit allowedHost. Skipping
+    // that merge (the previous behaviour whenever allowedHost was truthy) let
+    // one request set homeUrl and allowedHost to a mismatched pair: nothing
+    // here checked the new home URL's host against the new list, so the
+    // server stored the mismatch as-is and pushed it to the device via
+    // update_config. The agent's onConfigUpdated loads that homeUrl
+    // unconditionally (see hosts.test.mjs: "the device home URL is always
+    // part of its own allow-list" — the invariant this line restores for the
+    // one write path that could break it).
+    allowedHost = hostsForUrl(homeUrl, allowedHost || device.allowed_host);
   }
 
   // Whatever route the list arrived by, store it clean. The allow-list is what

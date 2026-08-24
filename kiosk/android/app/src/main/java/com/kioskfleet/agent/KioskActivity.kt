@@ -209,7 +209,18 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int) {
         allowedHosts = host
         idleReturnSeconds = idleSeconds
-        if (homeUrl.isNotEmpty()) webView.loadUrl(homeUrl)
+        // The same gate onSetUrl already applies to a command-driven
+        // navigation. A pushed config is server data like any other, and the
+        // server-side half of this fix (routes/devices.js) only stops a
+        // *new* mismatch from being stored — it does nothing for a device
+        // that already has a stale pair on disk or a heartbeat replaying
+        // one. Loading homeUrl unchecked here was the one path that could
+        // put the WebView's very first document load outside the allow-list
+        // this same call just installed.
+        if (homeUrl.isNotEmpty()) {
+            if (hostAllowed(android.net.Uri.parse(homeUrl).host)) webView.loadUrl(homeUrl)
+            else toast("קישור חסום: מחוץ לדומיינים המורשים")
+        }
         resetIdleTimer()
     }
 
