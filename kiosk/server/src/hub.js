@@ -147,8 +147,18 @@ function handleAgentMessage(deviceId, msg) {
   }
 
   if (msg.type === 'ack' && msg.commandId) {
-    db.prepare("UPDATE commands SET status = ?, result = ?, done_at = datetime('now') WHERE id = ?")
-      .run(msg.ok ? 'done' : 'failed', msg.result ? String(msg.result).slice(0, 2000) : null, msg.commandId);
+    // Scoped by device_id, matching routes/agent.js's REST /ack fallback.
+    // commands.id is a global AUTOINCREMENT across every device on the
+    // service, and this handler's only proof of identity is the device_token
+    // that authenticated the socket at connection time (`deviceId` above) —
+    // without this clause any enrolled device could ack *any* other owner's
+    // command by guessing/incrementing an id: marking a pending `unlock` or
+    // `reboot` on a device it does not own as "done" while it never ran, or
+    // "failed" with attacker-controlled `result` text shown in that owner's
+    // console, neither of which the device sending the message could
+    // otherwise touch.
+    db.prepare("UPDATE commands SET status = ?, result = ?, done_at = datetime('now') WHERE id = ? AND device_id = ?")
+      .run(msg.ok ? 'done' : 'failed', msg.result ? String(msg.result).slice(0, 2000) : null, msg.commandId, deviceId);
     logEvent(deviceId, null, 'command_ack', `#${msg.commandId} ${msg.ok ? 'done' : 'failed'}`);
   }
 }
