@@ -14,6 +14,8 @@ import linkRoutes from './routes/links.js';
 import clientRoutes from './routes/clients.js';
 import adminRoutes from './routes/admin.js';
 import agentRoutes from './routes/agent.js';
+import { issueCommand } from './commands.js';
+import { parseTimeToMinutes, desiredScreenState, minutesSinceMidnight } from './schedule.js';
 
 ensureSeed();
 
@@ -139,6 +141,31 @@ setInterval(() => {
   db.prepare(`UPDATE devices SET online = 0
      WHERE online = 1 AND (last_seen IS NULL OR last_seen < datetime('now', ?))`)
     .run(`-${config.offlineAfterMinutes} minutes`);
+}, 60_000);
+
+// KIOSK_BUILD.md §9 "תזמון": devices with a business-hours window configured
+// get an automatic screen_on/screen_off at the boundary, not just on request
+// from the console. `schedule_last_state` dedupes: issueCommand() has no
+// idempotency of its own, and without this a device already in the right
+// state would be re-sent the same command every tick, spamming both the
+// commands table and a live agent's socket. Runs against the server's own
+// local clock, the same clock the open/close strings are entered against.
+setInterval(() => {
+  const rows = db.prepare(
+    `SELECT * FROM devices WHERE schedule_enabled = 1
+     AND schedule_open_time IS NOT NULL AND schedule_close_time IS NOT NULL`
+  ).all();
+  if (!rows.length) return;
+  const nowMinutes = minutesSinceMidnight(new Date());
+  for (const device of rows) {
+    const openMinutes = parseTimeToMinutes(device.schedule_open_time);
+    const closeMinutes = parseTimeToMinutes(device.schedule_close_time);
+    if (openMinutes == null || closeMinutes == null) continue; // validated at write time; defensive only
+    const desired = desiredScreenState(nowMinutes, openMinutes, closeMinutes);
+    if (device.schedule_last_state === desired) continue;
+    issueCommand(device, desired === 'on' ? 'screen_on' : 'screen_off', null, null);
+    db.prepare('UPDATE devices SET schedule_last_state = ? WHERE id = ?').run(desired, device.id);
+  }
 }, 60_000);
 
 server.listen(config.port, () => {

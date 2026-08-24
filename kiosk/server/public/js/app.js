@@ -284,7 +284,10 @@ function mapDevice(d) {
     battery: d.battery, model: d.model, appVersion: d.app_version || d.appVersion, ip: d.ip,
     exitCode: d.exit_code || d.exitCode || '',
     lastScreenshotAt: d.last_screenshot_at || d.lastScreenshotAt || null,
-    displayZoomPercent: d.display_zoom_percent ?? d.displayZoomPercent ?? 100 };
+    displayZoomPercent: d.display_zoom_percent ?? d.displayZoomPercent ?? 100,
+    scheduleEnabled: d.schedule_enabled === 1 || d.schedule_enabled === true || d.scheduleEnabled === true,
+    scheduleOpenTime: d.schedule_open_time || d.scheduleOpenTime || '',
+    scheduleCloseTime: d.schedule_close_time || d.scheduleCloseTime || '' };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -338,7 +341,7 @@ function deviceCard(d) {
     </div>
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
-      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}</div>
+      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}</div>
     <div class="actions"></div></div>`);
   const acts = $('.actions', c);
   const mk = (label, fn, cls = 'btn-light') => { const b = el(`<button class="btn ${cls} btn-sm">${label}</button>`); b.onclick = fn; acts.appendChild(b); };
@@ -441,6 +444,12 @@ async function editDevice(d) {
     <div class="field"><label>חזרה אוטומטית לקישור לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="idle" type="number" min="0" value="${d.idleReturnSeconds || 0}" dir="ltr" /></div>
     <div class="field"><label>הגדלת תצוגה (זום): <span id="zoom-val">${d.displayZoomPercent || 100}%</span></label>
       <input id="zoom" type="range" min="50" max="300" step="10" value="${d.displayZoomPercent || 100}" dir="ltr" /></div>
+    <div class="field"><label><input id="sched-on" type="checkbox" ${d.scheduleEnabled ? 'checked' : ''} /> תזמון שעות פעילות (הדלקת/כיבוי מסך אוטומטי)</label>
+      <div id="sched-fields" style="display:${d.scheduleEnabled ? 'flex' : 'none'};gap:8px;margin-top:6px">
+        <div style="flex:1"><label style="font-size:12px">שעת פתיחה</label><input id="sched-open" type="time" value="${esc(d.scheduleOpenTime || '09:00')}" dir="ltr" /></div>
+        <div style="flex:1"><label style="font-size:12px">שעת סגירה</label><input id="sched-close" type="time" value="${esc(d.scheduleCloseTime || '21:00')}" dir="ltr" /></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">מחוץ לשעות אלה המסך יכבה אוטומטית; בתוך השעות — יידלק. תומך בחלון לילי (למשל 22:00–06:00).</div></div>
     <div class="field"><label>קוד תחזוקה מקומי (5 הקשות בפינת המסך)</label>
       <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
       <div style="font-size:12px;color:var(--muted);margin-top:-8px">
@@ -453,12 +462,15 @@ async function editDevice(d) {
   try { homeHost = new URL(d.homeUrl).host; } catch { /* no home URL yet */ }
   const hl = hostListEditor($('#hl', m), d.allowedHost, homeHost);
   $('#zoom', m).oninput = (e) => { $('#zoom-val', m).textContent = `${e.target.value}%`; };
+  $('#sched-on', m).onchange = (e) => { $('#sched-fields', m).style.display = e.target.checked ? 'flex' : 'none'; };
   loadDeviceClients(d, m);
 
   $('#s', m).onclick = async () => {
     // Adopt a domain that was typed but not added, rather than dropping it.
     if (!hl.commitPending()) return;
-    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value) };
+    const scheduleEnabled = $('#sched-on', m).checked;
+    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value),
+      scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }

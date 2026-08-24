@@ -15,6 +15,8 @@ const ROW = {
   battery: 88, model: 'Pixel', android_ver: '13', ip: '1.2.3.4', created_at: '2026-01-01T00:00:00Z',
   exit_code: 'sunset7', last_screenshot: 'data:image/jpeg;base64,/9j/notreallyanimage',
   last_screenshot_at: '2026-08-24T12:00:00Z', display_zoom_percent: 150,
+  schedule_enabled: 1, schedule_open_time: '09:00', schedule_close_time: '21:00',
+  schedule_last_state: 'on',
 };
 
 test('device_token never survives the merge into a console frame', () => {
@@ -46,11 +48,16 @@ test('a field the row does not have stays absent, not undefined', () => {
   assert.equal('owner_name' in out, false);
 });
 
-test('the exact dropped set is device_token and the screenshot image, nothing more', () => {
+test('the exact dropped set is device_token, the screenshot image, and schedule bookkeeping, nothing more', () => {
   const merged = { ...ROW };
   const out = consoleDevice(ROW, {});
   const dropped = Object.keys(merged).filter((k) => !(k in out));
-  assert.deepEqual(dropped.sort(), ['device_token', 'last_screenshot']);
+  assert.deepEqual(dropped.sort(), ['device_token', 'last_screenshot', 'schedule_last_state']);
+});
+
+test('schedule_last_state never survives — enforcement bookkeeping only, not console-facing', () => {
+  const out = consoleDevice(ROW, {});
+  assert.equal('schedule_last_state' in out, false);
 });
 
 test('last_screenshot_at survives so a console knows a capture is ready, but the image itself does not', () => {

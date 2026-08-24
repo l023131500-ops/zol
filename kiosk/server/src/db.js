@@ -158,6 +158,17 @@ ensureColumn('devices', 'last_screenshot_at', 'last_screenshot_at TEXT');
 // and render small on a 21"+ kiosk screen. 100 = no scaling, matching every
 // device enrolled before this column existed.
 ensureColumn('devices', 'display_zoom_percent', 'display_zoom_percent INTEGER NOT NULL DEFAULT 100');
+// KIOSK_BUILD.md §9 "תזמון": business-hours screen scheduling. 0/NULL on every
+// existing row, which is the honest value — no schedule was ever configured
+// before this column existed, matching exit_code's "NULL means never set"
+// convention above. schedule_last_state ('on'/'off') is enforcement
+// bookkeeping only (see index.js's interval) — it dedupes the automatic
+// screen_on/screen_off so a device already in the right state is not re-sent
+// the same command every tick; it is deliberately not surfaced to the console.
+ensureColumn('devices', 'schedule_enabled', 'schedule_enabled INTEGER NOT NULL DEFAULT 0');
+ensureColumn('devices', 'schedule_open_time', 'schedule_open_time TEXT');
+ensureColumn('devices', 'schedule_close_time', 'schedule_close_time TEXT');
+ensureColumn('devices', 'schedule_last_state', 'schedule_last_state TEXT');
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(

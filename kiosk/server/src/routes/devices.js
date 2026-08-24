@@ -7,6 +7,7 @@ import { notifyConsolesOfDevice } from '../hub.js';
 import { hostsForUrl, hostAllowed, normalizeHostCsv, parseHosts } from '../hosts.js';
 import { validateExitCode } from '../exitcode.js';
 import { clampZoomPercent } from '../display.js';
+import { validateScheduleWindow } from '../schedule.js';
 
 // Rebuilt and pushed on every write that can change what a device's own
 // selection screen should offer (KIOSK_BUILD.md §2★ה) — approving/revoking a
@@ -61,7 +62,8 @@ router.get('/devices/:id', requireAuth, (req, res) => {
 router.patch('/devices/:id', requireAuth, (req, res) => {
   const { device, error } = getOwnedDevice(req, req.params.id);
   if (error) return res.sendStatus(error);
-  let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent } = req.body || {};
+  let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent,
+        scheduleEnabled, scheduleOpenTime, scheduleCloseTime } = req.body || {};
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
@@ -72,6 +74,25 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
     const v = validateExitCode(exitCode);
     if (!v.ok) return res.status(400).json({ error: v.error });
     exitCodeValue = v.value;
+  }
+
+  // KIOSK_BUILD.md §9 "תזמון": only validated when the caller actually touches
+  // one of the three schedule fields — an edit to, say, just the name must not
+  // start requiring open/close times on a device that never had a schedule.
+  // Enabling always re-validates against whichever open/close ends up in
+  // effect (the new value if sent, else the device's existing one), so a
+  // request that flips scheduleEnabled=true without resending times an owner
+  // already saved earlier cannot skip the check.
+  let scheduleValues = null;
+  if (scheduleEnabled !== undefined || scheduleOpenTime !== undefined || scheduleCloseTime !== undefined) {
+    const enabled = !!scheduleEnabled;
+    const openTime = scheduleOpenTime !== undefined ? scheduleOpenTime : device.schedule_open_time;
+    const closeTime = scheduleCloseTime !== undefined ? scheduleCloseTime : device.schedule_close_time;
+    if (enabled) {
+      const v = validateScheduleWindow(openTime, closeTime);
+      if (!v.ok) return res.status(400).json({ error: v.error });
+    }
+    scheduleValues = { enabled: enabled ? 1 : 0, openTime: openTime || null, closeTime: closeTime || null };
   }
 
   // Selecting a link from the library overrides the URL + host set.
@@ -110,11 +131,18 @@ router.patch('/devices/:id', requireAuth, (req, res) => {
 
   db.prepare(`UPDATE devices SET name = COALESCE(?, name), home_url = COALESCE(?, home_url),
      allowed_host = COALESCE(?, allowed_host), idle_return_seconds = COALESCE(?, idle_return_seconds),
-     exit_code = COALESCE(?, exit_code), display_zoom_percent = COALESCE(?, display_zoom_percent) WHERE id = ?`)
+     exit_code = COALESCE(?, exit_code), display_zoom_percent = COALESCE(?, display_zoom_percent),
+     schedule_enabled = COALESCE(?, schedule_enabled), schedule_open_time = COALESCE(?, schedule_open_time),
+     schedule_close_time = COALESCE(?, schedule_close_time),
+     schedule_last_state = CASE WHEN ? = 1 THEN NULL ELSE schedule_last_state END WHERE id = ?`)
     .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
          exitCodeValue,
          displayZoomPercent != null ? clampZoomPercent(displayZoomPercent) : null,
+         scheduleValues ? scheduleValues.enabled : null,
+         scheduleValues ? scheduleValues.openTime : null,
+         scheduleValues ? scheduleValues.closeTime : null,
+         scheduleValues ? 1 : 0,
          device.id);
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   logEvent(device.id, req.user.id, 'config_update', null);
@@ -251,6 +279,8 @@ function publicDevice(d) {
     androidVer: d.android_ver, ip: d.ip, createdAt: d.created_at, exitCode: d.exit_code || '',
     lastScreenshotAt: d.last_screenshot_at || null,
     displayZoomPercent: d.display_zoom_percent ?? 100,
+    scheduleEnabled: !!d.schedule_enabled, scheduleOpenTime: d.schedule_open_time || '',
+    scheduleCloseTime: d.schedule_close_time || '',
   };
 }
 

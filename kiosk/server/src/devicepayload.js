@@ -23,11 +23,17 @@
 // screenshot — would bloat every live update for the sake of the rare one
 // that needs it. `last_screenshot_at` alone tells a console "one is ready";
 // the image is fetched on demand via GET /devices/:id/screenshot.
+// `schedule_last_state` is deliberately absent, same reasoning as
+// `last_screenshot`: it is enforcement bookkeeping for index.js's interval
+// (KIOSK_BUILD.md §9 "תזמון"), not something a console needs to render —
+// `schedule_enabled`/`schedule_open_time`/`schedule_close_time` alone tell the
+// owner what is configured.
 export const CONSOLE_DEVICE_FIELDS = [
   'id', 'owner_id', 'owner_name', 'serial', 'name', 'allowed_host', 'home_url',
   'idle_return_seconds', 'status', 'online', 'last_seen', 'app_version',
   'battery', 'model', 'android_ver', 'ip', 'created_at', 'exit_code',
   'last_screenshot_at', 'display_zoom_percent',
+  'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */
