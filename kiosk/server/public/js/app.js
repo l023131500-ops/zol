@@ -311,7 +311,7 @@ $('#menu').addEventListener('click', (e) => {
 function route(view) {
   CURRENT = view;
   [...$('#menu').children].forEach((a) => a.classList.toggle('active', a.dataset.view === view));
-  ({ devices: viewDevices, links: viewLinks, clients: viewClients, templates: viewTemplates, alerts: viewAlerts, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
+  ({ devices: viewDevices, links: viewLinks, clients: viewClients, templates: viewTemplates, alerts: viewAlerts, analytics: viewAnalytics, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
 }
 
 // Cache of the customer's link library (used by enroll + edit selectors).
@@ -927,6 +927,51 @@ async function loadAlerts() {
     <div class="card"><h3>📡 מכשירים אופליין (מעל ${thresholds.offlineMinutes} דקות)</h3>${offlineHtml}</div>
     <div class="card"><h3>🔋 סוללה נמוכה (מתחת ל-${thresholds.lowBatteryPercent}%)</h3>${batteryHtml}</div>
     <div class="card"><h3>🚪 ניסיונות יציאה מהקיוסק (${thresholds.exitAttemptWindowHours} שעות אחרונות)</h3>${exitHtml}</div>`;
+}
+
+// ── ANALYTICS (KIOSK_BUILD.md §9 "אנליטיקה: כמה שימושים, זמן ממוצע,
+// קישורים פופולריים") ──────────────────────────────────────────
+// "Usage" here is specifically client switches (see routes/analytics.js's own
+// header comment) — the number is honest about what is tracked, not a general
+// screen-on-time figure this system has no event source for.
+function formatDurationSeconds(seconds) {
+  if (seconds == null) return '—';
+  if (seconds < 60) return `${seconds} שנ׳`;
+  const m = Math.floor(seconds / 60), s = seconds % 60;
+  return s ? `${m} דק׳ ${s} שנ׳` : `${m} דק׳`;
+}
+
+async function viewAnalytics() {
+  $('#content').innerHTML = `<div class="topbar"><h1>אנליטיקה</h1>
+    <button class="btn btn-light btn-sm" id="analytics-refresh">רענון</button></div>
+    <div id="analytics-body"><p style="color:var(--muted)">טוען…</p></div>`;
+  $('#analytics-refresh').onclick = loadAnalytics;
+  await loadAnalytics();
+}
+
+async function loadAnalytics() {
+  let data;
+  try { data = await api('/analytics' + (ME.role === 'admin' ? '?all=1' : '')); }
+  catch (e) { toast(e.message, false); return; }
+  const box = $('#analytics-body'); if (!box) return;
+  const { totalSwitches, overallAvgSeconds, byClient } = data.summary;
+
+  const tableHtml = !byClient.length
+    ? '<p style="color:var(--muted);margin:0">עדיין אין מעברי לקוח מדווחים מהמכשירים.</p>'
+    : `<table><tr><th>לקוח</th><th>שימושים</th><th>זמן ממוצע במסך</th><th>שימוש אחרון</th></tr>${byClient.map((c) =>
+        `<tr><td><b>${esc(c.name)}</b> <span style="color:var(--muted);font-size:12px" dir="ltr">${esc(c.code)}</span></td>
+         <td>${c.count}</td>
+         <td>${formatDurationSeconds(c.avgSeconds)}</td>
+         <td>${c.lastUsedAt ? formatAlertTime(c.lastUsedAt) : '—'}</td></tr>`
+      ).join('')}</table>`;
+
+  box.innerHTML = `
+    <div class="stat-row">
+      <div class="stat"><div class="v">${totalSwitches}</div><div class="l">סה״כ מעברי לקוח</div></div>
+      <div class="stat"><div class="v">${formatDurationSeconds(overallAvgSeconds)}</div><div class="l">זמן ממוצע במסך</div></div>
+      <div class="stat"><div class="v">${byClient.length}</div><div class="l">לקוחות פעילים</div></div>
+    </div>
+    <div class="card"><h3>🔗 לקוחות פופולריים</h3>${tableHtml}</div>`;
 }
 
 // ── SETTINGS ────────────────────────────────────────────────────
