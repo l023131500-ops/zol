@@ -216,8 +216,27 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
                 cacheMode = WebSettings.LOAD_DEFAULT
                 setSupportZoom(false); displayZoomControls = false; builtInZoomControls = false
                 setSupportMultipleWindows(false)
+                // KIOSK_BUILD.md §9 "חסימת הורדות/קבצים": a public kiosk must
+                // not let a page reach the device's local filesystem or any
+                // content:// provider — both are ways off the locked site,
+                // and neither is ever needed by a legitimate client page.
+                allowFileAccess = false
+                allowContentAccess = false
             }
             setBackgroundColor(Color.WHITE)
+            // Any actual download attempt (a page linking a file instead of
+            // rendering it) is refused with feedback instead of failing
+            // silently with no listener registered at all.
+            setDownloadListener { _, _, _, _, _ -> toast("הורדות חסומות בקיוסק") }
+            // WebView's built-in long-press context menu ("שמור תמונה"/"פתח
+            // בכרטיסייה חדשה"/"העתק קישור") is a second, native escape hatch
+            // independent of shouldOverrideUrlLoading — it never asks the
+            // WebViewClient before acting. Consuming the long-click here is
+            // the standard way to suppress it, since WebView only falls back
+            // to its own context menu when the view's own listener leaves
+            // the event unconsumed.
+            setOnLongClickListener { true }
+            isHapticFeedbackEnabled = false
         }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
