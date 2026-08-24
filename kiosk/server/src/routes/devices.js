@@ -11,10 +11,20 @@ const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
 
 // Fetch a device, enforcing ownership (admins may access any device).
+//
+// A device owned by another customer answers the same 404 as one that does
+// not exist at all — not 403. links.js/enrollments.js's ownership checks in
+// this same file already collapse "not yours" into "not found"
+// (`if (!link || link.owner_id !== req.user.id) return res.sendStatus(404)`);
+// this one used to split the two into 403 vs 404, which lets any authenticated
+// customer enumerate device ids across the *entire* fleet — not just their
+// own — by probing GET/PATCH/DELETE /devices/:id and telling "exists,
+// someone else's" from "does not exist" purely from the status code. The
+// client never reads the distinction (api() in app.js throws on any !res.ok
+// with the same generic message either way), so nothing depends on 403 here.
 function getOwnedDevice(req, id) {
   const device = db.prepare('SELECT * FROM devices WHERE id = ?').get(id);
-  if (!device) return { error: 404 };
-  if (req.user.role !== 'admin' && device.owner_id !== req.user.id) return { error: 403 };
+  if (!device || (req.user.role !== 'admin' && device.owner_id !== req.user.id)) return { error: 404 };
   return { device };
 }
 
