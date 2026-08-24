@@ -178,6 +178,7 @@ function publicDevice(d) {
     scheduleCloseTime: d.schedule_close_time || '',
     signageEnabled: !!d.signage_enabled, signageUrls: d.signage_urls || '',
     signageIntervalSeconds: d.signage_interval_seconds ?? 15,
+    maintenanceEnabled: !!d.maintenance_enabled, maintenanceMessage: d.maintenance_message || '',
   };
 }
 

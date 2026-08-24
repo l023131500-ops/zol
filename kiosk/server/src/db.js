@@ -152,6 +152,8 @@ CREATE TABLE IF NOT EXISTS templates (
   signage_enabled INTEGER,
   signage_urls TEXT,
   signage_interval_seconds INTEGER,
+  maintenance_enabled INTEGER,
+  maintenance_message TEXT,
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(owner_id, name)
 );
@@ -178,6 +180,8 @@ CREATE TABLE IF NOT EXISTS policy_snapshots (
   signage_enabled INTEGER,
   signage_urls TEXT,
   signage_interval_seconds INTEGER,
+  maintenance_enabled INTEGER,
+  maintenance_message TEXT,
   created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -240,6 +244,20 @@ ensureColumn('devices', 'signage_interval_seconds', 'signage_interval_seconds IN
 // display_zoom_percent, which always has a value.
 ensureColumn('clients', 'logo_url', 'logo_url TEXT');
 ensureColumn('clients', 'brand_color', 'brand_color TEXT');
+// KIOSK_BUILD.md §9 "מצב תחזוקה מרחוק": remote on/off switch, distinct from
+// exit_code (the *local* corner-tap code). 0/NULL on every existing row and
+// every pre-existing template/snapshot, the honest "never turned on" value —
+// same "NULL means never configured" convention exit_code/schedule_*/
+// signage_* already use. templates/policy_snapshots predate this column, so
+// (unlike devices, whose CREATE TABLE above already lists it) they need the
+// same ensureColumn treatment device-table additions above needed before
+// this file's CREATE TABLE blocks caught up to include them.
+ensureColumn('devices', 'maintenance_enabled', 'maintenance_enabled INTEGER NOT NULL DEFAULT 0');
+ensureColumn('devices', 'maintenance_message', 'maintenance_message TEXT');
+ensureColumn('templates', 'maintenance_enabled', 'maintenance_enabled INTEGER');
+ensureColumn('templates', 'maintenance_message', 'maintenance_message TEXT');
+ensureColumn('policy_snapshots', 'maintenance_enabled', 'maintenance_enabled INTEGER');
+ensureColumn('policy_snapshots', 'maintenance_message', 'maintenance_message TEXT');
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(

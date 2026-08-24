@@ -92,6 +92,22 @@ test('buildTemplateFields rejects a non-URL displayZoomPercent-style bad homeUrl
   assert.equal(buildTemplateFields({ homeUrl: '' }).fields.home_url, null);
 });
 
+test('buildTemplateFields accepts a maintenance flag+message and rejects an over-long one', () => {
+  const ok = buildTemplateFields({ maintenanceEnabled: true, maintenanceMessage: 'בתחזוקה עד הערב' });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.fields.maintenance_enabled, 1);
+  assert.equal(ok.fields.maintenance_message, 'בתחזוקה עד הערב');
+  const bad = buildTemplateFields({ maintenanceEnabled: true, maintenanceMessage: 'א'.repeat(201) });
+  assert.match(bad.error, /ארוכה מדי/);
+});
+
+test('buildTemplateFields allows disabling maintenance without a message', () => {
+  const { fields, error } = buildTemplateFields({ maintenanceEnabled: false });
+  assert.equal(error, undefined);
+  assert.equal(fields.maintenance_enabled, 0);
+  assert.equal(fields.maintenance_message, null);
+});
+
 test('policyPatchFromTemplate includes only the columns a template row actually sets', () => {
   const row = {
     home_url: null, allowed_host: 'example.com', idle_return_seconds: null,
@@ -123,5 +139,20 @@ test('templateColumns is a fixed whitelist, not derived from any request', () =>
   const cols = templateColumns();
   assert.ok(cols.includes('name'));
   assert.ok(cols.includes('signage_interval_seconds'));
+  assert.ok(cols.includes('maintenance_enabled'));
+  assert.ok(cols.includes('maintenance_message'));
   assert.equal(new Set(cols).size, cols.length);
+});
+
+test('policyPatchFromTemplate carries maintenance fields when the template sets them', () => {
+  const row = {
+    home_url: null, allowed_host: null, idle_return_seconds: null, exit_code: null,
+    display_zoom_percent: null, schedule_enabled: null, schedule_open_time: null,
+    schedule_close_time: null, signage_enabled: null, signage_urls: null, signage_interval_seconds: null,
+    maintenance_enabled: 1, maintenance_message: 'סגור לתחזוקה',
+  };
+  assert.deepEqual(policyPatchFromTemplate(row), {
+    maintenanceEnabled: true,
+    maintenanceMessage: 'סגור לתחזוקה',
+  });
 });

@@ -15,6 +15,7 @@ import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
+import { validateMaintenanceMessage } from './maintenance.js';
 import { SNAPSHOT_COLUMNS, MAX_SNAPSHOTS_PER_DEVICE, snapshotFieldsFromDevice, policyFieldsPresent } from './snapshots.js';
 
 /**
@@ -53,6 +54,7 @@ export function pushConfigUpdate(device, userId) {
     approvedClients: approvedClientsForDevice(device.id),
     signageEnabled: !!device.signage_enabled, signageUrls: device.signage_urls || '',
     signageIntervalSeconds: device.signage_interval_seconds,
+    maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
   }, userId ?? null);
 }
 
@@ -73,7 +75,8 @@ export function pushConfigUpdate(device, userId) {
 export function applyDevicePolicy(device, body, userId, snapshotReason) {
   let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent,
         scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
-        signageEnabled, signageUrls, signageIntervalSeconds } = body || {};
+        signageEnabled, signageUrls, signageIntervalSeconds,
+        maintenanceEnabled, maintenanceMessage } = body || {};
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
@@ -129,6 +132,20 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
     signageValues = { enabled: enabled ? 1 : 0, urls: urlsValue, intervalSeconds: intervalValue };
   }
 
+  // KIOSK_BUILD.md §9 "מצב תחזוקה מרחוק": same conditional-validation shape
+  // as scheduleValues/signageValues above — only checked when the caller
+  // actually touches one of the two maintenance fields, re-validated against
+  // whichever message ends up in effect (new value if sent, else the
+  // device's existing one), so `maintenanceEnabled=true` alone, reusing a
+  // message saved earlier, still gets checked.
+  let maintenanceValues = null;
+  if (maintenanceEnabled !== undefined || maintenanceMessage !== undefined) {
+    const message = maintenanceMessage !== undefined ? maintenanceMessage : device.maintenance_message;
+    const v = validateMaintenanceMessage(message);
+    if (!v.ok) return { ok: false, status: 400, error: v.error };
+    maintenanceValues = { enabled: maintenanceEnabled ? 1 : 0, message: v.value };
+  }
+
   // Selecting a link from the library overrides the URL + host set.
   if (linkId) {
     const link = db.prepare('SELECT * FROM links WHERE id = ? AND owner_id = ?').get(linkId, device.owner_id);
@@ -178,7 +195,9 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
      schedule_close_time = COALESCE(?, schedule_close_time),
      schedule_last_state = CASE WHEN ? = 1 THEN NULL ELSE schedule_last_state END,
      signage_enabled = COALESCE(?, signage_enabled), signage_urls = COALESCE(?, signage_urls),
-     signage_interval_seconds = COALESCE(?, signage_interval_seconds) WHERE id = ?`)
+     signage_interval_seconds = COALESCE(?, signage_interval_seconds),
+     maintenance_enabled = COALESCE(?, maintenance_enabled),
+     maintenance_message = CASE WHEN ? = 1 THEN ? ELSE maintenance_message END WHERE id = ?`)
     .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
          exitCodeValue,
@@ -190,6 +209,9 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
          signageValues ? signageValues.enabled : null,
          signageValues ? signageValues.urls : null,
          signageValues ? signageValues.intervalSeconds : null,
+         maintenanceValues ? maintenanceValues.enabled : null,
+         maintenanceValues ? 1 : 0,
+         maintenanceValues ? maintenanceValues.message : null,
          device.id);
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   logEvent(device.id, userId, 'config_update', null);

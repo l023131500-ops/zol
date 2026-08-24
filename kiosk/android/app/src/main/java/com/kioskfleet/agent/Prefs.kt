@@ -20,6 +20,10 @@ object Prefs {
     const val SIGNAGE_ENABLED  = "signage_enabled"   // "1"/"0" — KIOSK_BUILD.md §9 digital signage
     const val SIGNAGE_URLS     = "signage_urls"      // newline-separated playlist, same shape as the console's textarea
     const val SIGNAGE_INTERVAL = "signage_interval"  // seconds between rotations
+    // KIOSK_BUILD.md §9 "מצב תחזוקה מרחוק": a remote on/off switch pushed from
+    // the console, distinct from ADMIN_CODE (the *local* corner-tap code).
+    const val MAINTENANCE_ENABLED = "maintenance_enabled"  // "1"/"0"
+    const val MAINTENANCE_MESSAGE = "maintenance_message"  // customer-facing text; empty = use the on-device default
     // KIOSK_BUILD.md §0/§8 watchdog: a crash/stuck-reboot report Watchdog.kt
     // could not reach the network from (the process is mid-crash, or about
     // to reboot) — persisted here so it survives to the next process start

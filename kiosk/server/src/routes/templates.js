@@ -23,6 +23,8 @@ function publicTemplate(t) {
     scheduleOpenTime: t.schedule_open_time, scheduleCloseTime: t.schedule_close_time,
     signageEnabled: t.signage_enabled == null ? null : !!t.signage_enabled,
     signageUrls: t.signage_urls, signageIntervalSeconds: t.signage_interval_seconds,
+    maintenanceEnabled: t.maintenance_enabled == null ? null : !!t.maintenance_enabled,
+    maintenanceMessage: t.maintenance_message,
   };
 }
 

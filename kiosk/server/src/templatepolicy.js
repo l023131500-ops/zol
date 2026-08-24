@@ -24,6 +24,7 @@ import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
+import { validateMaintenanceMessage } from './maintenance.js';
 
 /**
  * Validate + normalize whatever subset of template fields is present in
@@ -99,6 +100,13 @@ export function buildTemplateFields(body) {
     fields.signage_interval_seconds = intervalValue;
   }
 
+  if (b.maintenanceEnabled !== undefined || b.maintenanceMessage !== undefined) {
+    const v = validateMaintenanceMessage(b.maintenanceMessage);
+    if (!v.ok) return { error: v.error };
+    fields.maintenance_enabled = b.maintenanceEnabled ? 1 : 0;
+    fields.maintenance_message = v.value;
+  }
+
   return { fields };
 }
 
@@ -127,6 +135,10 @@ export function policyPatchFromTemplate(row) {
     patch.signageUrls = row.signage_urls;
     patch.signageIntervalSeconds = row.signage_interval_seconds;
   }
+  if (row.maintenance_enabled != null) {
+    patch.maintenanceEnabled = !!row.maintenance_enabled;
+    patch.maintenanceMessage = row.maintenance_message;
+  }
   return patch;
 }
 
@@ -134,6 +146,7 @@ const TEMPLATE_COLUMNS = [
   'name', 'home_url', 'allowed_host', 'idle_return_seconds', 'exit_code', 'display_zoom_percent',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
+  'maintenance_enabled', 'maintenance_message',
 ];
 
 /** Whitelist used to build a dynamic SQL SET clause — never derived from request input. */

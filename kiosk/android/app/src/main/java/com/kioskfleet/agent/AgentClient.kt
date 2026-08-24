@@ -159,18 +159,34 @@ class AgentClient(
                 if (signageUrls != Prefs.get(ctx, Prefs.SIGNAGE_URLS, "")) Prefs.set(ctx, Prefs.SIGNAGE_URLS, signageUrls)
                 val signageInterval = cfg.optInt("signageIntervalSeconds", Prefs.get(ctx, Prefs.SIGNAGE_INTERVAL).toIntOrNull() ?: 15)
                 if (signageInterval.toString() != Prefs.get(ctx, Prefs.SIGNAGE_INTERVAL)) Prefs.set(ctx, Prefs.SIGNAGE_INTERVAL, signageInterval.toString())
+                // KIOSK_BUILD.md §9 "מצב תחזוקה מרחוק": unlike signage above
+                // (idle-only content, read lazily whenever the idle timer next
+                // fires), a maintenance toggle has to block the screen the
+                // moment it changes — so, unlike signageEnabled, this one
+                // *does* have to feed into the changed/zoomChanged gate below
+                // that decides whether onConfigUpdated actually fires this
+                // heartbeat, the same reason zoomChanged itself is in that gate.
+                val maintenanceEnabled = if (cfg.optBoolean("maintenanceEnabled",
+                        Prefs.get(ctx, Prefs.MAINTENANCE_ENABLED, "0") == "1")) "1" else "0"
+                val maintenanceMessage = cfg.optString("maintenanceMessage", Prefs.get(ctx, Prefs.MAINTENANCE_MESSAGE, ""))
+                val maintenanceChanged = maintenanceEnabled != Prefs.get(ctx, Prefs.MAINTENANCE_ENABLED, "0") ||
+                    maintenanceMessage != Prefs.get(ctx, Prefs.MAINTENANCE_MESSAGE, "")
+                if (maintenanceChanged) {
+                    Prefs.set(ctx, Prefs.MAINTENANCE_ENABLED, maintenanceEnabled)
+                    Prefs.set(ctx, Prefs.MAINTENANCE_MESSAGE, maintenanceMessage)
+                }
                 if (home.isNotEmpty()) {
                     val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
                         host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
                         idle.toString() != Prefs.get(ctx, Prefs.IDLE_RETURN) ||
-                        zoomChanged
+                        zoomChanged || maintenanceChanged
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
                     if (changed) ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
-                } else if (zoomChanged) {
-                    // No home-link change to carry the update, but the zoom
-                    // still has to reach the on-screen WebView.
+                } else if (zoomChanged || maintenanceChanged) {
+                    // No home-link change to carry the update, but the zoom/
+                    // maintenance state still has to reach the on-screen WebView.
                     ui.post { handler.onConfigUpdated(Prefs.get(ctx, Prefs.HOME_URL), Prefs.get(ctx, Prefs.ALLOWED_HOST), idle, zoom) }
                 }
             }
@@ -226,6 +242,16 @@ class AgentClient(
                     val signageUrls = payload.optString("signageUrls", Prefs.get(ctx, Prefs.SIGNAGE_URLS, ""))
                     val signageInterval = payload.optInt("signageIntervalSeconds",
                         Prefs.get(ctx, Prefs.SIGNAGE_INTERVAL).toIntOrNull() ?: 15)
+                    // KIOSK_BUILD.md §9 "מצב תחזוקה מרחוק": same silent-persist
+                    // shape as signage above — this handler already calls
+                    // onConfigUpdated() unconditionally below (an operator push
+                    // is always an active management action, not a "did
+                    // anything change" poll), so KioskActivity's own read of
+                    // these two Prefs keys from there is enough; no new
+                    // CommandHandler parameter needed.
+                    val maintenanceEnabled = if (payload.optBoolean("maintenanceEnabled",
+                            Prefs.get(ctx, Prefs.MAINTENANCE_ENABLED, "0") == "1")) "1" else "0"
+                    val maintenanceMessage = payload.optString("maintenanceMessage", Prefs.get(ctx, Prefs.MAINTENANCE_MESSAGE, ""))
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
@@ -235,6 +261,8 @@ class AgentClient(
                     Prefs.set(ctx, Prefs.SIGNAGE_ENABLED, signageEnabled)
                     Prefs.set(ctx, Prefs.SIGNAGE_URLS, signageUrls)
                     Prefs.set(ctx, Prefs.SIGNAGE_INTERVAL, signageInterval.toString())
+                    Prefs.set(ctx, Prefs.MAINTENANCE_ENABLED, maintenanceEnabled)
+                    Prefs.set(ctx, Prefs.MAINTENANCE_MESSAGE, maintenanceMessage)
                     ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }

@@ -104,6 +104,11 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       approvedClients: approvedClientsForDevice(device.id),
       signageEnabled: !!device.signage_enabled, signageUrls: device.signage_urls || '',
       signageIntervalSeconds: device.signage_interval_seconds,
+      // Same "must land on its own" reasoning as adminCode above: a device
+      // could be put in maintenance mode moments before a fresh install
+      // enrolls it (a technician prepping a unit that will not go live
+      // yet), and enrollment is the first response this device ever reads.
+      maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
     },
   });
 });
@@ -141,6 +146,7 @@ router.post('/heartbeat', (req, res) => {
       approvedClients: approvedClientsForDevice(fresh.id),
       signageEnabled: !!fresh.signage_enabled, signageUrls: fresh.signage_urls || '',
       signageIntervalSeconds: fresh.signage_interval_seconds,
+      maintenanceEnabled: !!fresh.maintenance_enabled, maintenanceMessage: fresh.maintenance_message || '',
     },
     commands,
   });

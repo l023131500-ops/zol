@@ -296,7 +296,9 @@ function mapDevice(d) {
     scheduleCloseTime: d.schedule_close_time || d.scheduleCloseTime || '',
     signageEnabled: d.signage_enabled === 1 || d.signage_enabled === true || d.signageEnabled === true,
     signageUrls: d.signage_urls || d.signageUrls || '',
-    signageIntervalSeconds: d.signage_interval_seconds ?? d.signageIntervalSeconds ?? 15 };
+    signageIntervalSeconds: d.signage_interval_seconds ?? d.signageIntervalSeconds ?? 15,
+    maintenanceEnabled: d.maintenance_enabled === 1 || d.maintenance_enabled === true || d.maintenanceEnabled === true,
+    maintenanceMessage: d.maintenance_message || d.maintenanceMessage || '' };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -348,6 +350,7 @@ function deviceCard(d) {
         <div class="serial">S/N: ${esc(d.serial)}</div>${owner}</div>
       <span class="pill ${d.online ? 'on' : 'off'}">${d.online ? 'מחובר' : 'מנותק'}</span>
     </div>
+    ${d.maintenanceEnabled ? `<div class="pill off" style="margin-top:4px">🛠 בתחזוקה מרחוק${d.maintenanceMessage ? ' — ' + esc(d.maintenanceMessage) : ''}</div>` : ''}
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
       🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}</div>
@@ -469,6 +472,11 @@ async function editDevice(d) {
           <input id="sig-interval" type="number" min="3" max="3600" value="${d.signageIntervalSeconds || 15}" dir="ltr" /></div>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:4px">רק כאשר אין אינטראקציה מעבר לזמן החזרה האוטומטית שהוגדר למעלה; כל נגיעה במסך חוזרת מיד לקישור הראשי. הקישורים חייבים להיות בתוך הדומיינים המורשים של המכשיר.</div></div>
+    <div class="field"><label><input id="maint-on" type="checkbox" ${d.maintenanceEnabled ? 'checked' : ''} /> מצב תחזוקה מרחוק (הוצא את המכשיר משירות מיידית)</label>
+      <div id="maint-fields" style="display:${d.maintenanceEnabled ? 'block' : 'none'};margin-top:6px">
+        <textarea id="maint-msg" style="width:100%;height:50px;font-size:13px" placeholder="הודעה ללקוח (אופציונלי) — למשל: המכשיר בתחזוקה זמנית, נחזור בקרוב">${esc(d.maintenanceMessage)}</textarea>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">חוסם את המסך הנעול מיד ומציג הודעה במקומו, בלי לנתק את המכשיר או לאבד את הגדרותיו. כבו כדי להחזיר לשירות.</div></div>
     <div class="field"><label>קוד תחזוקה מקומי (5 הקשות בפינת המסך)</label>
       <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
       <div style="font-size:12px;color:var(--muted);margin-top:-8px">
@@ -489,6 +497,7 @@ async function editDevice(d) {
   $('#zoom', m).oninput = (e) => { $('#zoom-val', m).textContent = `${e.target.value}%`; };
   $('#sched-on', m).onchange = (e) => { $('#sched-fields', m).style.display = e.target.checked ? 'flex' : 'none'; };
   $('#sig-on', m).onchange = (e) => { $('#sig-fields', m).style.display = e.target.checked ? 'block' : 'none'; };
+  $('#maint-on', m).onchange = (e) => { $('#maint-fields', m).style.display = e.target.checked ? 'block' : 'none'; };
   loadDeviceClients(d, m);
   loadDeviceSnapshots(d, m);
   $('#snap-save', m).onclick = async () => {
@@ -503,9 +512,11 @@ async function editDevice(d) {
     if (!hl.commitPending()) return;
     const scheduleEnabled = $('#sched-on', m).checked;
     const signageEnabled = $('#sig-on', m).checked;
+    const maintenanceEnabled = $('#maint-on', m).checked;
     const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value),
       scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value,
-      signageEnabled, signageUrls: $('#sig-urls', m).value, signageIntervalSeconds: Number($('#sig-interval', m).value) };
+      signageEnabled, signageUrls: $('#sig-urls', m).value, signageIntervalSeconds: Number($('#sig-interval', m).value),
+      maintenanceEnabled, maintenanceMessage: $('#maint-msg', m).value };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }
@@ -789,7 +800,7 @@ function clientModal(c) {
 // fleet without also silently overwriting every device's own home URL.
 async function viewTemplates() {
   $('#content').innerHTML = `<div class="topbar"><h1>תבניות</h1></div>
-    <p style="color:var(--muted);max-width:680px">שמרו כאן מדיניות (דומיינים מותרים, שעות פעילות, תצוגה, זום, קוד תחזוקה) והחילו אותה על כמה מכשירים בבת אחת. כל שדה מוחל רק אם סימנתם אותו — שדה לא-מסומן נשאר כפי שהיה בכל מכשיר.</p>
+    <p style="color:var(--muted);max-width:680px">שמרו כאן מדיניות (דומיינים מותרים, שעות פעילות, תצוגה, זום, מצב תחזוקה, קוד תחזוקה) והחילו אותה על כמה מכשירים בבת אחת. כל שדה מוחל רק אם סימנתם אותו — שדה לא-מסומן נשאר כפי שהיה בכל מכשיר.</p>
     <div class="card" style="max-width:680px">
       <h3>תבנית חדשה</h3>
       <div class="field"><label>שם התבנית</label><input id="tpl-name" placeholder="למשל: שעות פעילות אולם" /></div>
@@ -814,6 +825,11 @@ async function viewTemplates() {
           <div style="max-width:200px;margin-top:6px"><label style="font-size:12px">זמן החלפה (שניות)</label>
             <input id="tpl-sig-interval" type="number" min="3" max="3600" value="15" dir="ltr" /></div>
         </div></div>
+      <div class="field"><label><input id="tpl-maint-on" type="checkbox" /> כלול מצב תחזוקה מרחוק בתבנית</label>
+        <div id="tpl-maint-fields" style="display:none;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px"><input id="tpl-maint-enabled" type="checkbox" /> מופעל (לא מסומן = החזרת המכשירים לשירות בכל מכשיר שהתבנית תוחל עליו)</label>
+          <textarea id="tpl-maint-msg" style="width:100%;height:50px;font-size:13px;margin-top:6px" placeholder="הודעה ללקוח (אופציונלי)"></textarea>
+        </div></div>
       <div class="field"><label>קוד תחזוקה מקומי (אופציונלי; ריק = לא לכלול)</label><input id="tpl-exit" placeholder="לא לכלול" dir="ltr" /></div>
       <button class="btn btn-primary" id="tpl-create">שמור תבנית</button>
     </div>
@@ -823,6 +839,7 @@ async function viewTemplates() {
   $('#tpl-zoom').oninput = (e) => { $('#tpl-zoom-val').textContent = `${e.target.value}%`; };
   $('#tpl-sched-on').onchange = (e) => { $('#tpl-sched-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-sig-on').onchange = (e) => { $('#tpl-sig-fields').style.display = e.target.checked ? 'block' : 'none'; };
+  $('#tpl-maint-on').onchange = (e) => { $('#tpl-maint-fields').style.display = e.target.checked ? 'block' : 'none'; };
 
   $('#tpl-create').onclick = async () => {
     const name = $('#tpl-name').value.trim();
@@ -843,6 +860,10 @@ async function viewTemplates() {
       body.signageUrls = $('#tpl-sig-urls').value;
       body.signageIntervalSeconds = Number($('#tpl-sig-interval').value);
     }
+    if ($('#tpl-maint-on').checked) {
+      body.maintenanceEnabled = $('#tpl-maint-enabled').checked;
+      body.maintenanceMessage = $('#tpl-maint-msg').value;
+    }
     const btn = $('#tpl-create');
     btn.disabled = true;
     try { await api('/templates', { method: 'POST', body: JSON.stringify(body) }); toast('התבנית נשמרה'); viewTemplates(); }
@@ -862,6 +883,7 @@ function templateSummary(t) {
   if (t.displayZoomPercent != null) parts.push(`זום ${t.displayZoomPercent}%`);
   if (t.scheduleEnabled != null) parts.push(t.scheduleEnabled ? `שעות ${t.scheduleOpenTime}–${t.scheduleCloseTime}` : 'כיבוי תזמון');
   if (t.signageEnabled != null) parts.push(t.signageEnabled ? 'מצב תצוגה' : 'כיבוי תצוגה');
+  if (t.maintenanceEnabled != null) parts.push(t.maintenanceEnabled ? 'מצב תחזוקה' : 'החזרה לשירות');
   return parts.length ? parts.join(' · ') : 'תבנית ריקה';
 }
 

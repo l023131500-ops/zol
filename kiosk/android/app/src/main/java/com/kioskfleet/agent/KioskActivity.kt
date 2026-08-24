@@ -42,12 +42,25 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         // between a corrupted/stale cache value and an invalid CSS colour
         // silently doing nothing (or, worse, being used unescaped).
         val BRAND_COLOR_RE = Regex("^#[0-9a-fA-F]{6}$")
+        // KIOSK_BUILD.md §9 "מצב תחזוקה מרחוק" default screen text, used
+        // whenever an owner turns maintenance on without typing a custom
+        // message (server-side: maintenance.js's validateMaintenanceMessage
+        // treats blank as "no custom message", not an error).
+        const val DEFAULT_MAINTENANCE_MESSAGE = "המכשיר בתחזוקה זמנית — נחזור בקרוב"
     }
 
     private lateinit var webView: WebView
     private lateinit var wakeLock: PowerManager.WakeLock
     private lateinit var agent: AgentClient
     private var overlay: TextView? = null
+    // Deliberately a *separate* view from `overlay` above, not a reuse of it:
+    // onScreenOn()/onScreenOff() unconditionally show/hide `overlay` as a
+    // software blackout, and onMessage() reuses it for an operator note —
+    // either one firing while a device is in remote maintenance would clear
+    // (screen_on) or repurpose (message) the maintenance block if they shared
+    // a view. A second, independent view means the two features cannot step
+    // on each other's state.
+    private var maintenanceOverlay: TextView? = null
     private var cornerTapCount = 0
     private var isAdminUnlocked = false
     private var allowedHosts = ""       // comma-separated — the *currently active* scope (device baseline, or a selected client's)
@@ -210,6 +223,10 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         val start = safeStoredUrl(Prefs.get(this, Prefs.LAST_URL)).ifEmpty { safeStoredUrl(Prefs.get(this, Prefs.HOME_URL)) }
         webView.loadUrl(start.ifEmpty { "about:blank" })
         resetIdleTimer()
+        // Resume into whatever maintenance state the last config left behind
+        // — a crash/reboot must not silently put a maintained-off device
+        // back in front of customers before the next heartbeat/WS message.
+        applyMaintenanceState()
 
         agent = AgentClient(this, this)
         agent.start()
@@ -412,6 +429,12 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         idleReturnSeconds = idleSeconds
         val zoomChanged = zoomPercent != displayZoomPercent
         displayZoomPercent = zoomPercent
+        // AgentClient.kt already persisted the fresh Prefs.MAINTENANCE_*
+        // values (both the heartbeat and update_config paths) before this
+        // callback fires; applying it here, independent of the homeUrl/zoom
+        // branches below, means an operator toggling *only* maintenance still
+        // takes effect immediately rather than waiting on an unrelated field.
+        applyMaintenanceState()
         // The same gate onSetUrl already applies to a command-driven
         // navigation. A pushed config is server data like any other, and the
         // server-side half of this fix (routes/devices.js) only stops a
@@ -459,6 +482,43 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         overlay?.text = text; overlay?.visibility = View.VISIBLE
     }
     private fun removeOverlay() = runOnUiThread { overlay?.visibility = View.GONE }
+
+    /**
+     * KIOSK_BUILD.md §9 "מצב תחזוקה מרחוק" — was entirely unbuilt; there was
+     * no way to take one device out of customer-facing service without either
+     * disenrolling it or wiping its allow-list/home-URL by hand. Reads
+     * Prefs.MAINTENANCE_ENABLED/_MESSAGE directly (same "no new
+     * CommandHandler parameter" shape signage/schedule already use) rather
+     * than taking them as arguments, so it can be called from both onCreate()
+     * (resume into the same blocked state after a crash/reboot, the same
+     * reasoning LAST_URL's own restart handling already documents) and
+     * onConfigUpdated() (live toggle from the console) with one code path.
+     *
+     * Deliberately *not* built on the shared `overlay`/showOverlay() above —
+     * see the maintenanceOverlay property comment for why a second view is
+     * required. Also deliberately non-interactive (no click listener,
+     * `isClickable` left false): touches still fall through to `webView`
+     * underneath, the same as `overlay`'s own screen_off blackout already
+     * does, so the hidden corner-tap admin-unlock gesture (§4's "מחוות יציאה
+     * מדורגות") keeps working while the customer-facing screen shows the
+     * maintenance message — a technician must still be able to reach it
+     * without needing the console to turn maintenance off first.
+     */
+    private fun applyMaintenanceState() = runOnUiThread {
+        val enabled = Prefs.get(this, Prefs.MAINTENANCE_ENABLED, "0") == "1"
+        if (!enabled) { maintenanceOverlay?.visibility = View.GONE; return@runOnUiThread }
+        val message = Prefs.get(this, Prefs.MAINTENANCE_MESSAGE, "").ifBlank { DEFAULT_MAINTENANCE_MESSAGE }
+        if (maintenanceOverlay == null) {
+            maintenanceOverlay = TextView(this).apply {
+                setBackgroundColor(Color.BLACK); setTextColor(Color.WHITE)
+                gravity = android.view.Gravity.CENTER; textSize = 22f
+                setPadding(48, 48, 48, 48)
+            }
+            addContentView(maintenanceOverlay, WindowManager.LayoutParams(-1, -1))
+        }
+        maintenanceOverlay?.text = message
+        maintenanceOverlay?.visibility = View.VISIBLE
+    }
 
     // ── Hidden maintenance entry / customer selection (KIOSK_BUILD.md §4, §2★ה) ──
     private fun setupTouchInterceptor() {
