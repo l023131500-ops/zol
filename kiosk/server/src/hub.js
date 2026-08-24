@@ -3,6 +3,7 @@ import { verifyToken } from './auth.js';
 import { db, logEvent } from './db.js';
 import { config } from './config.js';
 import { wsRoute, isWsRoute } from './wspath.js';
+import { consoleDevice } from './devicepayload.js';
 
 /**
  * Realtime hub.
@@ -40,7 +41,8 @@ export function notifyConsolesOfDevice(device, payload) {
     const set = consoles.get(a.id);
     if (set) set.forEach((ws) => targets.add(ws));
   }
-  for (const ws of targets) send(ws, { type: 'device_update', device: { ...device, ...payload } });
+  const device_update = consoleDevice(device, payload);
+  for (const ws of targets) send(ws, { type: 'device_update', device: device_update });
 }
 
 function markOnline(deviceId, online) {
