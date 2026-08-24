@@ -46,7 +46,7 @@ router.get('/devices/:id', requireAuth, (req, res) => {
 router.patch('/devices/:id', requireAuth, (req, res) => {
   const { device, error } = getOwnedDevice(req, req.params.id);
   if (error) return res.sendStatus(error);
-  const result = applyDevicePolicy(device, req.body || {}, req.user.id);
+  const result = applyDevicePolicy(device, req.body || {}, req.user.id, 'עריכה ידנית');
   if (!result.ok) return res.status(result.status).json({ error: result.error });
   res.json({ device: publicDevice(result.device) });
 });

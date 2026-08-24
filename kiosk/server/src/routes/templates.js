@@ -95,7 +95,7 @@ router.post('/templates/:id/apply', requireAuth, (req, res) => {
   for (const id of deviceIds) {
     const device = db.prepare('SELECT * FROM devices WHERE id = ?').get(id);
     if (!device || device.owner_id !== req.user.id) { skipped.push(id); continue; }
-    const result = applyDevicePolicy(device, patch, req.user.id);
+    const result = applyDevicePolicy(device, patch, req.user.id, `החלת תבנית "${template.name}"`);
     if (result.ok) {
       applied.push(id);
       logEvent(device.id, req.user.id, 'template_applied', template.name);

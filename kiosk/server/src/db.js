@@ -156,6 +156,32 @@ CREATE TABLE IF NOT EXISTS templates (
   UNIQUE(owner_id, name)
 );
 
+-- KIOSK_BUILD.md §9 "גיבוי/שחזור מדיניות" — a restorable capture of one
+-- device's own policy fields, taken automatically before every write
+-- policy.js's applyDevicePolicy makes (and optionally on demand, "שמור מצב
+-- נוכחי"). Column-for-column the same policy subset as 'templates' above
+-- (minus its 'name', which names a reusable preset — a snapshot instead
+-- carries 'reason', a free-text note of why it was taken), so a snapshot
+-- row restores via templatepolicy.js's policyPatchFromTemplate unchanged.
+CREATE TABLE IF NOT EXISTS policy_snapshots (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  device_id     INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  reason        TEXT,
+  home_url      TEXT,
+  allowed_host  TEXT,
+  idle_return_seconds INTEGER,
+  exit_code     TEXT,
+  display_zoom_percent INTEGER,
+  schedule_enabled INTEGER,
+  schedule_open_time TEXT,
+  schedule_close_time TEXT,
+  signage_enabled INTEGER,
+  signage_urls TEXT,
+  signage_interval_seconds INTEGER,
+  created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_devices_owner ON devices(owner_id);
 CREATE INDEX IF NOT EXISTS idx_commands_device ON commands(device_id, status);
 CREATE INDEX IF NOT EXISTS idx_events_device ON events(device_id);
@@ -163,6 +189,7 @@ CREATE INDEX IF NOT EXISTS idx_links_owner ON links(owner_id);
 CREATE INDEX IF NOT EXISTS idx_clients_owner ON clients(owner_id);
 CREATE INDEX IF NOT EXISTS idx_device_clients_device ON device_clients(device_id);
 CREATE INDEX IF NOT EXISTS idx_templates_owner ON templates(owner_id);
+CREATE INDEX IF NOT EXISTS idx_policy_snapshots_device ON policy_snapshots(device_id, id);
 `);
 
 // ── Lightweight migrations for databases created by earlier versions ──

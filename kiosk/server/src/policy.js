@@ -15,6 +15,31 @@ import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
+import { SNAPSHOT_COLUMNS, MAX_SNAPSHOTS_PER_DEVICE, snapshotFieldsFromDevice, policyFieldsPresent } from './snapshots.js';
+
+/**
+ * Persist `device`'s *current* policy state as a restorable snapshot
+ * (KIOSK_BUILD.md §9 "גיבוי/שחזור מדיניות") — `reason` says why: an
+ * automatic "before overwrite" backup taken inside applyDevicePolicy below,
+ * right before it changes anything, or an owner's own deliberate "שמור מצב
+ * נוכחי" bookmark from routes/snapshots.js. Trims to
+ * MAX_SNAPSHOTS_PER_DEVICE, oldest first, in the same call so a
+ * frequently-edited device's snapshot history cannot grow without bound.
+ */
+export function saveSnapshot(device, reason, userId) {
+  const fields = snapshotFieldsFromDevice(device);
+  db.prepare(
+    `INSERT INTO policy_snapshots (device_id, reason, created_by, ${SNAPSHOT_COLUMNS.join(', ')})
+     VALUES (?, ?, ?, ${SNAPSHOT_COLUMNS.map(() => '?').join(', ')})`
+  ).run(device.id, reason ?? null, userId ?? null, ...SNAPSHOT_COLUMNS.map((c) => fields[c]));
+  const extra = db.prepare(
+    'SELECT id FROM policy_snapshots WHERE device_id = ? ORDER BY id DESC LIMIT -1 OFFSET ?'
+  ).all(device.id, MAX_SNAPSHOTS_PER_DEVICE);
+  if (extra.length) {
+    const ids = extra.map((r) => r.id);
+    db.prepare(`DELETE FROM policy_snapshots WHERE id IN (${ids.map(() => '?').join(', ')})`).run(...ids);
+  }
+}
 
 // Rebuilt and pushed on every write that can change what a device's own
 // selection screen should offer (KIOSK_BUILD.md §2★ה) — approving/revoking a
@@ -38,8 +63,14 @@ export function pushConfigUpdate(device, userId) {
  * error }` on a validation failure — the caller decides how to surface that
  * (routes/devices.js returns it directly; routes/templates.js's bulk apply
  * collects it per device instead of failing the whole batch).
+ *
+ * `snapshotReason`, when given, backs the device's pre-write state up via
+ * saveSnapshot before anything below is changed — but only once validation
+ * has passed and the request actually touches a policy field
+ * (policyFieldsPresent), so a rejected request or a name-only edit never
+ * spends a slot in the 20-snapshot budget for nothing it would protect.
  */
-export function applyDevicePolicy(device, body, userId) {
+export function applyDevicePolicy(device, body, userId, snapshotReason) {
   let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent,
         scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
         signageEnabled, signageUrls, signageIntervalSeconds } = body || {};
@@ -130,6 +161,14 @@ export function applyDevicePolicy(device, body, userId) {
       return { ok: false, status: 400, error: 'רשימת הדומיינים אינה תקינה — נדרש לפחות דומיין אחד תקף (למשל example.com)' };
     }
     allowedHost = cleaned || null;
+  }
+
+  // Every validation above has already returned on failure — this is the
+  // last point before the write below, and the only one, so the snapshot
+  // always reflects exactly what the device had *right before* this call
+  // changed it (never a half-validated in-between state).
+  if (snapshotReason && policyFieldsPresent(body)) {
+    saveSnapshot(device, snapshotReason, userId);
   }
 
   db.prepare(`UPDATE devices SET name = COALESCE(?, name), home_url = COALESCE(?, home_url),

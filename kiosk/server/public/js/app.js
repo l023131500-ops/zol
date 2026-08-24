@@ -379,6 +379,7 @@ const EVENT_LABELS = {
   enrolled: 'המכשיר נרשם', config_update: 'הגדרות עודכנו', screenshot: 'צילום מסך נלכד',
   client_identified: 'זוהה לקוח במכשיר', client_approved: 'לקוח אושר למכשיר', client_revoked: 'אישור לקוח בוטל',
   template_applied: 'תבנית הוחלה על המכשיר',
+  snapshot_saved: 'גיבוי מדיניות נשמר', snapshot_restored: 'שוחזר גיבוי מדיניות',
 };
 const COMMAND_LABELS = {
   reboot: 'אתחול', reload: 'רענון', set_url: 'החלפת כתובת', screen_on: 'הדלקת מסך', screen_off: 'כיבוי מסך',
@@ -474,6 +475,12 @@ async function editDevice(d) {
         לפחות 4 תווים, לא רצף ולא תו חוזר (למשל 1234 או 1111). השאירו ריק כדי לבטל.</div>
     <div class="field"><label>לקוחות מאושרים למכשיר זה (§2★ה — הזנת המזהה במכשיר תפתח רק את אלה)</label>
       <div id="cl-approve">טוען…</div></div>
+    <div class="field"><label>גיבוי/שחזור מדיניות (כל שמירה מגבה אוטומטית את המצב הקודם)</label>
+      <div class="row" style="margin-bottom:8px">
+        <input id="snap-label" placeholder="תווית לגיבוי ידני (אופציונלי)" style="flex:1" />
+        <button class="btn btn-light" id="snap-save" type="button">שמור מצב נוכחי</button>
+      </div>
+      <div id="snap-list">טוען…</div></div>
     <div class="row"><button class="btn btn-primary" id="s">שמירה</button><button class="btn btn-light" id="c">ביטול</button></div>`);
 
   let homeHost = '';
@@ -483,6 +490,13 @@ async function editDevice(d) {
   $('#sched-on', m).onchange = (e) => { $('#sched-fields', m).style.display = e.target.checked ? 'flex' : 'none'; };
   $('#sig-on', m).onchange = (e) => { $('#sig-fields', m).style.display = e.target.checked ? 'block' : 'none'; };
   loadDeviceClients(d, m);
+  loadDeviceSnapshots(d, m);
+  $('#snap-save', m).onclick = async () => {
+    const label = $('#snap-label', m).value.trim();
+    try { await api(`/devices/${d.id}/snapshots`, { method: 'POST', body: JSON.stringify({ label }) });
+      $('#snap-label', m).value = ''; toast('הגיבוי נשמר'); loadDeviceSnapshots(d, m); }
+    catch (e) { toast(e.message, false); }
+  };
 
   $('#s', m).onclick = async () => {
     // Adopt a domain that was typed but not added, rather than dropping it.
@@ -523,6 +537,39 @@ async function loadDeviceClients(d, m) {
         await api(`/devices/${d.id}/clients/${cb.dataset.client}`, { method: cb.checked ? 'POST' : 'DELETE' });
       } catch (e) { cb.checked = !cb.checked; toast(e.message, false); }
       finally { cb.disabled = false; }
+    };
+  });
+}
+// KIOSK_BUILD.md §9 "גיבוי/שחזור מדיניות". Rendered the same "load into a
+// placeholder div inside the still-open edit modal" shape as
+// loadDeviceClients above; restoring closes the modal and reloads the device
+// list rather than trying to patch every open field in place, the same
+// "act now, don't try to keep the open form in sync" choice editDevice's own
+// save handler already makes.
+async function loadDeviceSnapshots(d, m) {
+  const box = $('#snap-list', m); if (!box) return;
+  let snapshots;
+  try { ({ snapshots } = await api(`/devices/${d.id}/snapshots`)); }
+  catch (e) { box.innerHTML = `<p style="color:#b91c1c;font-size:13px;margin:0">${esc(e.message)}</p>`; return; }
+  if (!snapshots.length) {
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px;margin:0">אין עדיין גיבויים — כל שמירה תיצור אחד אוטומטית.</p>';
+    return;
+  }
+  box.innerHTML = snapshots.map((s) => `<div class="row" style="justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)">
+    <span style="font-size:13px">${esc(s.reason || 'גיבוי')} <span style="color:var(--muted)">— ${fmtTime(s.createdAt)}</span></span>
+    <button class="btn btn-light" data-restore="${s.id}" type="button" style="font-size:12px">שחזר</button>
+  </div>`).join('');
+  box.querySelectorAll('[data-restore]').forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.restore;
+      const c = modal(`<h3>שחזור גיבוי מדיניות</h3><p style="color:var(--muted)">מכשיר "${esc(d.name)}" יחזור להגדרות השמורות בגיבוי זה (המצב הנוכחי יגובה אוטומטית לפני כן).</p>
+        <div class="row"><button class="btn btn-danger" id="y">שחזר</button><button class="btn btn-light" id="n">ביטול</button></div>`);
+      $('#y', c).onclick = async () => {
+        try { await api(`/devices/${d.id}/snapshots/${id}/restore`, { method: 'POST' });
+          toast('הגיבוי שוחזר. המכשיר יתעדכן מיד.'); c.remove(); m.remove(); loadDevices(); }
+        catch (e) { toast(e.message, false); c.remove(); }
+      };
+      $('#n', c).onclick = () => c.remove();
     };
   });
 }
