@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { customAlphabet } from 'nanoid';
 import { db, logEvent } from '../db.js';
 import { notifyConsolesOfDevice } from '../hub.js';
@@ -13,13 +14,32 @@ function deviceFromToken(req) {
   return db.prepare('SELECT * FROM devices WHERE device_token = ?').get(t);
 }
 
+// /enroll is the one endpoint in this router with no auth at all — a fresh
+// device proves nothing but a 6-character code drawn from a 33-symbol
+// alphabet (~1.29e9 combinations). /auth/login guards the same shape of
+// credential (a secret a caller presents with no prior session) with
+// loginLimiter; this route had nothing, so a script could sweep the whole
+// code space, and every hit before the real device enrolls both steals that
+// owner's device slot (the code flips to `used`, "already redeemed" for the
+// device standing at the venue) and leaks their homeUrl/allowedHost in the
+// response — no device_token required to read it. Keyed by IP like
+// loginLimiter: the real device tries one code once, so the entire budget is
+// spent on whoever is scanning.
+const enrollLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'יותר מדי ניסיונות רישום. נסו שוב בעוד מספר דקות.' },
+});
+
 /**
  * POST /api/agent/enroll
  * Body: { code, serial, name?, model?, androidVersion?, appVersion? }
  * A fresh device redeems a one-time enrollment code and receives a device_token
  * plus its assigned home_url / allowed_host.
  */
-router.post('/enroll', (req, res) => {
+router.post('/enroll', enrollLimiter, (req, res) => {
   const { code, serial } = req.body || {};
   if (!code || !serial) return res.status(400).json({ error: 'code and serial are required' });
 
