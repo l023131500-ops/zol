@@ -58,9 +58,24 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         }
     }
 
-    /** After inactivity, return to the exact event/venue link — never a generic home. */
+    /** A stored URL, or "" if its host is not in the current allow-list. */
+    private fun safeStoredUrl(candidate: String): String {
+        if (candidate.isEmpty()) return ""
+        return if (hostAllowed(android.net.Uri.parse(candidate).host)) candidate else ""
+    }
+
+    /**
+     * After inactivity, return to the exact event/venue link — never a generic home.
+     *
+     * Gated the same way onSetUrl/onConfigUpdated already gate a navigation:
+     * HOME_URL on disk is normally guaranteed (server-side) to be inside
+     * ALLOWED_HOST, but a device that already held a stale, mismatched pair
+     * from before that guarantee existed — or any future write that skips it —
+     * would otherwise have this, the one navigation nothing else in the file
+     * gates, load it straight into the WebView on every idle timeout.
+     */
     private fun returnToVenue() {
-        val venue = Prefs.get(this, Prefs.HOME_URL)
+        val venue = safeStoredUrl(Prefs.get(this, Prefs.HOME_URL))
         if (venue.isNotEmpty()) webView.loadUrl(venue)
     }
 
@@ -77,7 +92,12 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         setupWebView()
         setupTouchInterceptor()
 
-        val start = Prefs.get(this, Prefs.LAST_URL).ifEmpty { Prefs.get(this, Prefs.HOME_URL) }
+        // Same gate as returnToVenue(): LAST_URL was allowed under whatever
+        // list was live when it was recorded, which is not necessarily the
+        // list just loaded above — an owner who narrows the allow-list (moves
+        // the device off an old venue) between app restarts must not have
+        // that revocation undone by the restart re-opening the old page.
+        val start = safeStoredUrl(Prefs.get(this, Prefs.LAST_URL)).ifEmpty { safeStoredUrl(Prefs.get(this, Prefs.HOME_URL)) }
         webView.loadUrl(start.ifEmpty { "about:blank" })
         resetIdleTimer()
 
