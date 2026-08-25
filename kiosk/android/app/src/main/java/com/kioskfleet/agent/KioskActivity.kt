@@ -512,7 +512,14 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
             maintenanceOverlay = TextView(this).apply {
                 setBackgroundColor(Color.BLACK); setTextColor(Color.WHITE)
                 gravity = android.view.Gravity.CENTER; textSize = 22f
-                setPadding(48, 48, 48, 48)
+                // KIOSK_BUILD.md §5 "פריסה ב-dp... תמיכה בצפיפויות": raw-px
+                // padding (48,48,48,48) renders as a different physical size
+                // on every screen density instead of the "same place on
+                // every device" the spec requires — scale by density like
+                // every other padding value in this app already does
+                // (EnrollActivity's own `pad`, same 24dp).
+                val pad = (24 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad, pad, pad)
             }
             addContentView(maintenanceOverlay, WindowManager.LayoutParams(-1, -1))
         }
