@@ -7,6 +7,7 @@ import { normalizeClientCode } from '../clients.js';
 import { validateExitAttemptBody } from '../alerts.js';
 import { validateWatchdogReportBody } from '../watchdog.js';
 import { sanitizeBatteryLevel } from '../batterylevel.js';
+import { validateCommandId } from '../commandid.js';
 
 // Device-facing API. Auth is by device_token (issued at enrollment), NOT by JWT.
 const router = express.Router();
@@ -227,11 +228,13 @@ router.post('/screenshot', (req, res) => {
   if (typeof image !== 'string' || !SCREENSHOT_RE.test(image)) {
     return res.status(400).json({ error: 'invalid image' });
   }
+  const idCheck = validateCommandId(commandId);
+  if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
   const now = new Date().toISOString();
   db.prepare('UPDATE devices SET last_screenshot = ?, last_screenshot_at = ? WHERE id = ?').run(image, now, device.id);
-  if (commandId) {
+  if (idCheck.value) {
     db.prepare("UPDATE commands SET status = 'done', result = ?, done_at = datetime('now') WHERE id = ? AND device_id = ?")
-      .run('screenshot saved', commandId, device.id);
+      .run('screenshot saved', idCheck.value, device.id);
   }
   logEvent(device.id, null, 'screenshot', null);
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
@@ -244,9 +247,11 @@ router.post('/ack', (req, res) => {
   const device = deviceFromToken(req);
   if (!device) return res.status(401).json({ error: 'device token invalid' });
   const { commandId, ok, result } = req.body || {};
-  if (!commandId) return res.status(400).json({ error: 'commandId required' });
+  const idCheck = validateCommandId(commandId);
+  if (!idCheck.ok) return res.status(400).json({ error: idCheck.error });
+  if (!idCheck.value) return res.status(400).json({ error: 'commandId required' });
   db.prepare("UPDATE commands SET status = ?, result = ?, done_at = datetime('now') WHERE id = ? AND device_id = ?")
-    .run(ok ? 'done' : 'failed', result ? String(result).slice(0, 2000) : null, commandId, device.id);
+    .run(ok ? 'done' : 'failed', result ? String(result).slice(0, 2000) : null, idCheck.value, device.id);
   logEvent(device.id, null, 'command_ack', `#${commandId} ${ok ? 'done' : 'failed'}`);
   res.json({ ok: true });
 });
