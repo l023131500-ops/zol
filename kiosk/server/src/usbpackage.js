@@ -28,6 +28,8 @@
 // logic this sandbox cannot execute end-to-end (no real device/adb host
 // here either).
 
+import { normalizeHomeUrl } from './hosts.js';
+
 const PACKAGE_NAME = 'com.kioskfleet.agent';
 const DEFAULT_APK_FILENAME = 'kioskfleet-agent.apk';
 // The app's own app-specific external-storage directory: no storage
@@ -127,7 +129,18 @@ export function buildUsbOfflineScript({
   const cleanSerial = sanitizeSerial(serial);
   if (!cleanSerial) throw new Error('serial is required');
   if (!homeUrl) throw new Error('homeUrl is required');
-  try { new URL(homeUrl); } catch { throw new Error('homeUrl must be a valid URL'); }
+  // Same normalizeHomeUrl() gate every other door onto a device's home_url
+  // uses (PATCH /devices/:id, POST /enrollments, set_url, POST/PATCH /links,
+  // device-group templates, client brand-site URLs) — the bare `new URL()`
+  // doesn't-throw check this used to have lets `javascript:`/`data:` URIs
+  // through the same way every one of those doors did before its own fix.
+  // routes/devices.js already calls this with an already-validated
+  // `device.home_url`, but this module is defensive on its own input rather
+  // than trusting every caller went through that path (windowspackage.js's
+  // buildWindowsKioskScript uses the same defense-in-depth shape).
+  const checkedHome = normalizeHomeUrl(homeUrl);
+  if (!checkedHome.ok) throw new Error('homeUrl must be a valid URL');
+  homeUrl = checkedHome.value;
   if (!deviceToken) throw new Error('deviceToken is required');
 
   const payload = buildOfflineEnrollPayload({

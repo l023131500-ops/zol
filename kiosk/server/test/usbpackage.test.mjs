@@ -76,6 +76,17 @@ test('buildUsbOfflineScript rejects missing serial, homeUrl, or deviceToken', ()
   );
 });
 
+test('buildUsbOfflineScript rejects a javascript:/data: homeUrl the same way every other door does', () => {
+  assert.throws(
+    () => buildUsbOfflineScript({ serial: 'ABC123', homeUrl: 'javascript:alert(document.cookie)' }),
+    /valid URL/
+  );
+  assert.throws(
+    () => buildUsbOfflineScript({ serial: 'ABC123', homeUrl: 'data:text/html,<script>alert(1)</script>' }),
+    /valid URL/
+  );
+});
+
 function baseArgs(extra = {}) {
   return {
     serial: 'R58N123ABCD', homeUrl: 'https://venue.example.com/kiosk',

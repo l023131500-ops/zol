@@ -49,6 +49,17 @@ test('buildWindowsKioskScript rejects a missing or invalid homeUrl', () => {
   assert.throws(() => buildWindowsKioskScript({ homeUrl: 'not a url' }), /valid URL/);
 });
 
+test('buildWindowsKioskScript rejects a javascript:/data: homeUrl the same way every other door does', () => {
+  assert.throws(
+    () => buildWindowsKioskScript({ homeUrl: 'javascript:alert(document.cookie)' }),
+    /valid URL/
+  );
+  assert.throws(
+    () => buildWindowsKioskScript({ homeUrl: 'data:text/html,<script>alert(1)</script>' }),
+    /valid URL/
+  );
+});
+
 test('buildWindowsKioskScript always includes the home URL\'s own host in the allow-list', () => {
   const script = buildWindowsKioskScript({ homeUrl: 'https://venue.example.com/kiosk', allowedHost: '' });
   assert.match(script, /\$edgeAllowlistPath -Name '1' -Value 'venue\.example\.com'/);

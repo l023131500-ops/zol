@@ -31,7 +31,7 @@
 // Android-side entry in this project's log — this is verified by inspection
 // and against current Microsoft documentation, not by execution.
 
-import { normalizeHostList } from './hosts.js';
+import { normalizeHostList, normalizeHomeUrl } from './hosts.js';
 
 export const DEFAULT_IDLE_TIMEOUT_MINUTES = 5;
 const MAX_IDLE_TIMEOUT_MINUTES = 1440; // ceiling Edge's own --kiosk-idle-timeout-minutes documents
@@ -75,8 +75,17 @@ export function sanitizeKioskUsername(raw) {
  */
 export function buildWindowsKioskScript({ deviceName, homeUrl, allowedHost, idleTimeoutMinutes, kioskUsername } = {}) {
   if (!homeUrl) throw new Error('homeUrl is required');
-  let homeHost = '';
-  try { homeHost = new URL(homeUrl).host.toLowerCase(); } catch { throw new Error('homeUrl must be a valid URL'); }
+  // Same normalizeHomeUrl() gate every other door onto a device's home_url
+  // uses (PATCH /devices/:id, POST /enrollments, set_url, POST/PATCH /links,
+  // device-group templates, client brand-site URLs, usbpackage.js's own
+  // buildUsbOfflineScript) — the bare `new URL()` doesn't-throw check this
+  // used to have lets `javascript:`/`data:` URIs through the same way every
+  // one of those doors did before its own fix, and this is the value the
+  // generated script embeds as Edge's `--kiosk` start-page argument below.
+  const checkedHome = normalizeHomeUrl(homeUrl);
+  if (!checkedHome.ok) throw new Error('homeUrl must be a valid URL');
+  homeUrl = checkedHome.value;
+  const homeHost = new URL(homeUrl).host.toLowerCase();
 
   // hostsForUrl() already folds the home URL's own host into allowed_host at
   // write time (see hosts.js), but this generator is defensive on its own
