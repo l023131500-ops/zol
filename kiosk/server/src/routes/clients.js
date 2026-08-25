@@ -1,7 +1,7 @@
 import express from 'express';
 import { db, logEvent } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { hostsForUrl } from '../hosts.js';
+import { hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { normalizeClientCode, normalizeBrandColor, normalizeLogoUrl } from '../clients.js';
 
 // The owner's own customer directory (KIOSK_BUILD.md §2★ד): "מזהה לקוח" +
@@ -27,7 +27,18 @@ router.post('/clients', requireAuth, (req, res) => {
   const cleanCode = normalizeClientCode(code);
   if (!cleanCode) return res.status(400).json({ error: 'מזהה לקוח לא תקין — 2 עד 24 אותיות/ספרות' });
   if (!name || !url) return res.status(400).json({ error: 'נדרשים שם וכתובת אתר' });
-  try { new URL(url); } catch { return res.status(400).json({ error: 'כתובת אתר לא תקינה' }); }
+  // This is the "אתר תדמית" a device's WebView navigates to the moment
+  // someone types this client's code in (routes/devices.js's GET
+  // /devices/:id/clients hands `url` straight through) — the same
+  // door-into-the-locked-WebView class as home_url (hosts.js), so it holds
+  // the same http(s)-only bar, not the looser "does new URL() throw" check
+  // that used to sit here (a `javascript:`/`data:` URL passes that silently).
+  const checkedUrl = normalizeHomeUrl(url);
+  if (!checkedUrl.ok || !checkedUrl.value) {
+    return res.status(400).json({
+      error: checkedUrl.reason === 'scheme' ? 'כתובת האתר חייבת להתחיל ב-http:// או ב-https://' : 'כתובת אתר לא תקינה',
+    });
+  }
   // KIOSK_BUILD.md §9 branding — both optional, so only a non-empty value
   // that fails validation is rejected; leaving the field blank is not an error.
   const cleanLogoUrl = normalizeLogoUrl(logoUrl);
@@ -36,10 +47,10 @@ router.post('/clients', requireAuth, (req, res) => {
   if (brandColor && !cleanBrandColor) return res.status(400).json({ error: 'צבע מותג לא תקין (למשל #2563eb)' });
   const dup = db.prepare('SELECT id FROM clients WHERE owner_id = ? AND code = ?').get(req.user.id, cleanCode);
   if (dup) return res.status(409).json({ error: 'מזהה לקוח זה כבר קיים' });
-  const hosts = hostsForUrl(url, allowedHost);
+  const hosts = hostsForUrl(checkedUrl.value, allowedHost);
   const info = db.prepare(
     'INSERT INTO clients (owner_id, code, name, url, allowed_host, logo_url, brand_color) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.user.id, cleanCode, String(name).trim(), String(url).trim(), hosts, cleanLogoUrl || null, cleanBrandColor || null);
+  ).run(req.user.id, cleanCode, String(name).trim(), checkedUrl.value, hosts, cleanLogoUrl || null, cleanBrandColor || null);
   logEvent(null, req.user.id, 'client_created', cleanCode);
   res.json({ client: publicClient(db.prepare('SELECT * FROM clients WHERE id = ?').get(info.lastInsertRowid)) });
 });
@@ -55,8 +66,16 @@ router.patch('/clients/:id', requireAuth, (req, res) => {
     const dup = db.prepare('SELECT id FROM clients WHERE owner_id = ? AND code = ? AND id != ?').get(req.user.id, newCode, client.id);
     if (dup) return res.status(409).json({ error: 'מזהה לקוח זה כבר קיים' });
   }
-  const newUrl = url || client.url;
-  if (url) { try { new URL(url); } catch { return res.status(400).json({ error: 'כתובת אתר לא תקינה' }); } }
+  let newUrl = client.url;
+  if (url) {
+    const checkedUrl = normalizeHomeUrl(url);
+    if (!checkedUrl.ok || !checkedUrl.value) {
+      return res.status(400).json({
+        error: checkedUrl.reason === 'scheme' ? 'כתובת האתר חייבת להתחיל ב-http:// או ב-https://' : 'כתובת אתר לא תקינה',
+      });
+    }
+    newUrl = checkedUrl.value;
+  }
   const hosts = allowedHost != null || url ? hostsForUrl(newUrl, allowedHost ?? client.allowed_host) : client.allowed_host;
   // Explicit '' clears the field (removes the logo/colour); undefined leaves it as-is.
   let newLogoUrl = client.logo_url;
