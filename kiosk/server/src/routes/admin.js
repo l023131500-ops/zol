@@ -2,6 +2,7 @@ import express from 'express';
 import { db, logEvent } from '../db.js';
 import { requireAdmin, hashPassword } from '../auth.js';
 import { disconnectConsole } from '../hub.js';
+import { validateFullName } from '../users.js';
 
 // Super-admin only. Manage customer accounts and see the whole fleet.
 const router = express.Router();
@@ -24,10 +25,12 @@ router.post('/users', requireAdmin, (req, res) => {
   const { username, password, fullName, deviceLimit, role } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'נדרשים שם משתמש וסיסמה' });
   if (password.length < 8) return res.status(400).json({ error: 'סיסמה חייבת להיות באורך 8 תווים לפחות' });
+  const nameCheck = validateFullName(fullName);
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
   if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username))
     return res.status(409).json({ error: 'שם המשתמש כבר קיים' });
   const info = db.prepare('INSERT INTO users (username, password_hash, full_name, role, device_limit) VALUES (?, ?, ?, ?, ?)')
-    .run(String(username).trim(), hashPassword(password), fullName || null,
+    .run(String(username).trim(), hashPassword(password), nameCheck.value ?? null,
          role === 'admin' ? 'admin' : 'user', Math.max(1, Number(deviceLimit) || 1));
   logEvent(null, req.user.id, 'user_created', username);
   res.json({ user: db.prepare('SELECT id, username, full_name, role, device_limit, active FROM users WHERE id = ?').get(info.lastInsertRowid) });
@@ -37,8 +40,10 @@ router.patch('/users/:id', requireAdmin, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.sendStatus(404);
   const { fullName, deviceLimit, active, role } = req.body || {};
+  const nameCheck = validateFullName(fullName);
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
   db.prepare('UPDATE users SET full_name = COALESCE(?, full_name), device_limit = COALESCE(?, device_limit), active = COALESCE(?, active), role = COALESCE(?, role) WHERE id = ?')
-    .run(fullName ?? null, deviceLimit != null ? Math.max(1, Number(deviceLimit)) : null,
+    .run(nameCheck.value ?? null, deviceLimit != null ? Math.max(1, Number(deviceLimit)) : null,
          active != null ? (active ? 1 : 0) : null,
          role ? (role === 'admin' ? 'admin' : 'user') : null, user.id);
   // A deactivation must also end any console socket this user already has
