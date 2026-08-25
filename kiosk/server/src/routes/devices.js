@@ -318,6 +318,8 @@ router.post('/enrollments/:id/usb-package', requireAuth, (req, res) => {
       idleReturnSeconds: device.idle_return_seconds, adminCode: device.exit_code || '',
       displayZoomPercent: device.display_zoom_percent, displayOrientation: device.display_orientation,
       approvedClients: approvedClientsForDevice(device.id),
+      exitGestureTaps: device.exit_gesture_taps, exitGestureCorner: device.exit_gesture_corner,
+      exitGestureHoldMs: device.exit_gesture_hold_ms,
     });
   } catch (e) {
     // Device row is already provisioned at this point (matching how a
@@ -392,6 +394,9 @@ function publicDevice(d) {
     maintenanceEnabled: !!d.maintenance_enabled, maintenanceMessage: d.maintenance_message || '',
     accessCode: d.access_code || '',
     paymentMode: d.payment_mode || 'none',
+    exitGestureTaps: d.exit_gesture_taps ?? 5,
+    exitGestureCorner: d.exit_gesture_corner || 'tl',
+    exitGestureHoldMs: d.exit_gesture_hold_ms ?? 0,
   };
 }
 

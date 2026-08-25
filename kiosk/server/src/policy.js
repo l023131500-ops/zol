@@ -18,6 +18,7 @@ import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
 import { validatePaymentMode } from './payment.js';
+import { clampGestureTaps, validateGestureCorner, clampGestureHoldMs } from './gesturesettings.js';
 import { SNAPSHOT_COLUMNS, MAX_SNAPSHOTS_PER_DEVICE, snapshotFieldsFromDevice, policyFieldsPresent } from './snapshots.js';
 
 /**
@@ -58,6 +59,9 @@ export function pushConfigUpdate(device, userId) {
     signageIntervalSeconds: device.signage_interval_seconds,
     maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
     displayOrientation: device.display_orientation || 'landscape',
+    exitGestureTaps: device.exit_gesture_taps ?? 5,
+    exitGestureCorner: device.exit_gesture_corner || 'tl',
+    exitGestureHoldMs: device.exit_gesture_hold_ms ?? 0,
   }, userId ?? null);
   // paymentMode is deliberately NOT included above — see payment.js's own
   // comment: it never changes what the agent enforces, so it never rides on
@@ -82,7 +86,8 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
   let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent, displayOrientation,
         scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
         signageEnabled, signageUrls, signageIntervalSeconds,
-        maintenanceEnabled, maintenanceMessage, paymentMode } = body || {};
+        maintenanceEnabled, maintenanceMessage, paymentMode,
+        exitGestureTaps, exitGestureCorner, exitGestureHoldMs } = body || {};
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
@@ -174,6 +179,22 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
     orientationValue = v.value;
   }
 
+  // KIOSK_BUILD.md §4 "מחוֹת יציאה מדורגות... הכל ניתן להגדרה בלוח": three
+  // independent single fields, same shape as paymentMode/displayOrientation
+  // above — each has its own always-valid default (gesturesettings.js), so
+  // there is no "enabled" group to gate this behind the way schedule/signage
+  // above are.
+  let gestureTapsValue = null;
+  if (exitGestureTaps !== undefined) gestureTapsValue = clampGestureTaps(exitGestureTaps);
+  let gestureCornerValue = null;
+  if (exitGestureCorner !== undefined) {
+    const v = validateGestureCorner(exitGestureCorner);
+    if (!v.ok) return { ok: false, status: 400, error: v.error };
+    gestureCornerValue = v.value;
+  }
+  let gestureHoldMsValue = null;
+  if (exitGestureHoldMs !== undefined) gestureHoldMsValue = clampGestureHoldMs(exitGestureHoldMs);
+
   // Selecting a link from the library overrides the URL + host set.
   if (linkId) {
     const link = db.prepare('SELECT * FROM links WHERE id = ? AND owner_id = ?').get(linkId, device.owner_id);
@@ -227,7 +248,10 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
      maintenance_enabled = COALESCE(?, maintenance_enabled),
      maintenance_message = CASE WHEN ? = 1 THEN ? ELSE maintenance_message END,
      payment_mode = COALESCE(?, payment_mode),
-     display_orientation = COALESCE(?, display_orientation) WHERE id = ?`)
+     display_orientation = COALESCE(?, display_orientation),
+     exit_gesture_taps = COALESCE(?, exit_gesture_taps),
+     exit_gesture_corner = COALESCE(?, exit_gesture_corner),
+     exit_gesture_hold_ms = COALESCE(?, exit_gesture_hold_ms) WHERE id = ?`)
     .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
          exitCodeValue,
@@ -244,6 +268,9 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
          maintenanceValues ? maintenanceValues.message : null,
          paymentModeValue,
          orientationValue,
+         gestureTapsValue,
+         gestureCornerValue,
+         gestureHoldMsValue,
          device.id);
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   logEvent(device.id, userId, 'config_update', null);

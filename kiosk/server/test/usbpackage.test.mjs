@@ -42,6 +42,7 @@ test('buildOfflineEnrollPayload matches the shape /api/agent/enroll already retu
     allowedHost: 'venue.example.com,pay.example.com', idleReturnSeconds: 30,
     adminCode: '1379', displayZoomPercent: 150, displayOrientation: 'portrait',
     approvedClients: [{ code: 'A1' }],
+    exitGestureTaps: 7, exitGestureCorner: 'br', exitGestureHoldMs: 1500,
   });
   assert.deepEqual(payload, {
     deviceToken: 'tok123',
@@ -50,6 +51,7 @@ test('buildOfflineEnrollPayload matches the shape /api/agent/enroll already retu
       allowedHost: 'venue.example.com,pay.example.com', idleReturnSeconds: 30,
       adminCode: '1379', displayZoomPercent: 150, displayOrientation: 'portrait',
       approvedClients: [{ code: 'A1' }],
+      exitGestureTaps: 7, exitGestureCorner: 'br', exitGestureHoldMs: 1500,
     },
   });
 });
@@ -60,6 +62,7 @@ test('buildOfflineEnrollPayload defaults optional fields the same way enroll() d
     name: '', homeUrl: 'https://venue.example.com', allowedHost: '',
     idleReturnSeconds: 0, adminCode: '', displayZoomPercent: 100, displayOrientation: 'landscape',
     approvedClients: [],
+    exitGestureTaps: 5, exitGestureCorner: 'tl', exitGestureHoldMs: 0,
   });
 });
 
@@ -122,6 +125,19 @@ test('buildUsbOfflineScript carries displayOrientation into the embedded JSON pa
   });
   assert.ok(script.includes(JSON.stringify(payload, null, 2)));
   assert.match(script, /"displayOrientation": "portrait"/);
+});
+
+test('buildUsbOfflineScript carries exit-gesture settings into the embedded JSON payload', () => {
+  const script = buildUsbOfflineScript(baseArgs({ exitGestureTaps: 8, exitGestureCorner: 'bl', exitGestureHoldMs: 2000 }));
+  const payload = buildOfflineEnrollPayload({
+    deviceToken: 'TOKEN123', homeUrl: 'https://venue.example.com/kiosk',
+    allowedHost: 'venue.example.com',
+    exitGestureTaps: 8, exitGestureCorner: 'bl', exitGestureHoldMs: 2000,
+  });
+  assert.ok(script.includes(JSON.stringify(payload, null, 2)));
+  assert.match(script, /"exitGestureTaps": 8/);
+  assert.match(script, /"exitGestureCorner": "bl"/);
+  assert.match(script, /"exitGestureHoldMs": 2000/);
 });
 
 test('buildUsbOfflineScript strips CR/LF from the device name before it reaches the header comment', () => {

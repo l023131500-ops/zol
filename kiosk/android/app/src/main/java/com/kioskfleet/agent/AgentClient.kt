@@ -188,6 +188,18 @@ class AgentClient(
                     Prefs.set(ctx, Prefs.MAINTENANCE_ENABLED, maintenanceEnabled)
                     Prefs.set(ctx, Prefs.MAINTENANCE_MESSAGE, maintenanceMessage)
                 }
+                // KIOSK_BUILD.md §4: persisted the same silent way as
+                // adminCode/approvedClients above — KioskActivity reads
+                // these three straight from Prefs at gesture-check time (no
+                // reactive re-render needed, unlike zoom/orientation/
+                // maintenance), so no "changed" tracking or onConfigUpdated
+                // involvement is needed for this group either.
+                val gestureTaps = cfg.optInt("exitGestureTaps", Prefs.get(ctx, Prefs.EXIT_GESTURE_TAPS).toIntOrNull() ?: 5)
+                if (gestureTaps.toString() != Prefs.get(ctx, Prefs.EXIT_GESTURE_TAPS)) Prefs.set(ctx, Prefs.EXIT_GESTURE_TAPS, gestureTaps.toString())
+                val gestureCorner = cfg.optString("exitGestureCorner", Prefs.get(ctx, Prefs.EXIT_GESTURE_CORNER).ifEmpty { "tl" })
+                if (gestureCorner != Prefs.get(ctx, Prefs.EXIT_GESTURE_CORNER).ifEmpty { "tl" }) Prefs.set(ctx, Prefs.EXIT_GESTURE_CORNER, gestureCorner)
+                val gestureHoldMs = cfg.optInt("exitGestureHoldMs", Prefs.get(ctx, Prefs.EXIT_GESTURE_HOLD_MS).toIntOrNull() ?: 0)
+                if (gestureHoldMs.toString() != Prefs.get(ctx, Prefs.EXIT_GESTURE_HOLD_MS)) Prefs.set(ctx, Prefs.EXIT_GESTURE_HOLD_MS, gestureHoldMs.toString())
                 if (home.isNotEmpty()) {
                     val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
                         host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
@@ -279,6 +291,16 @@ class AgentClient(
                     val maintenanceEnabled = if (payload.optBoolean("maintenanceEnabled",
                             Prefs.get(ctx, Prefs.MAINTENANCE_ENABLED, "0") == "1")) "1" else "0"
                     val maintenanceMessage = payload.optString("maintenanceMessage", Prefs.get(ctx, Prefs.MAINTENANCE_MESSAGE, ""))
+                    // KIOSK_BUILD.md §4: same silent-persist shape as
+                    // signage/maintenance above — KioskActivity reads these
+                    // three straight from Prefs at gesture-check time, no
+                    // new CommandHandler parameter needed.
+                    val gestureTaps = payload.optInt("exitGestureTaps",
+                        Prefs.get(ctx, Prefs.EXIT_GESTURE_TAPS).toIntOrNull() ?: 5)
+                    val gestureCorner = payload.optString("exitGestureCorner",
+                        Prefs.get(ctx, Prefs.EXIT_GESTURE_CORNER).ifEmpty { "tl" })
+                    val gestureHoldMs = payload.optInt("exitGestureHoldMs",
+                        Prefs.get(ctx, Prefs.EXIT_GESTURE_HOLD_MS).toIntOrNull() ?: 0)
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
@@ -291,6 +313,9 @@ class AgentClient(
                     Prefs.set(ctx, Prefs.SIGNAGE_INTERVAL, signageInterval.toString())
                     Prefs.set(ctx, Prefs.MAINTENANCE_ENABLED, maintenanceEnabled)
                     Prefs.set(ctx, Prefs.MAINTENANCE_MESSAGE, maintenanceMessage)
+                    Prefs.set(ctx, Prefs.EXIT_GESTURE_TAPS, gestureTaps.toString())
+                    Prefs.set(ctx, Prefs.EXIT_GESTURE_CORNER, gestureCorner)
+                    Prefs.set(ctx, Prefs.EXIT_GESTURE_HOLD_MS, gestureHoldMs.toString())
                     ui.post { handler.onConfigUpdated(home, host, idle, zoom, orientation) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }

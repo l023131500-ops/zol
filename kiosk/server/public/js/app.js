@@ -333,7 +333,10 @@ function mapDevice(d) {
     maintenanceMessage: d.maintenance_message || d.maintenanceMessage || '',
     accessCode: d.access_code || d.accessCode || '',
     paymentMode: d.payment_mode || d.paymentMode || 'none',
-    displayOrientation: d.display_orientation || d.displayOrientation || 'landscape' };
+    displayOrientation: d.display_orientation || d.displayOrientation || 'landscape',
+    exitGestureTaps: d.exit_gesture_taps ?? d.exitGestureTaps ?? 5,
+    exitGestureCorner: d.exit_gesture_corner || d.exitGestureCorner || 'tl',
+    exitGestureHoldMs: d.exit_gesture_hold_ms ?? d.exitGestureHoldMs ?? 0 };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -395,6 +398,7 @@ function deviceCard(d) {
     ${d.maintenanceEnabled ? `<div class="pill off" style="margin-top:4px">🛠 בתחזוקה מרחוק${d.maintenanceMessage ? ' — ' + esc(d.maintenanceMessage) : ''}</div>` : ''}
     ${d.paymentMode && d.paymentMode !== 'none' ? `<div class="pill on" style="margin-top:4px">💳 ${esc((PAYMENT_MODE_INFO[d.paymentMode] || {}).label || d.paymentMode)}</div>` : ''}
     ${d.displayOrientation && d.displayOrientation !== 'landscape' ? `<div class="pill on" style="margin-top:4px">↕️ ${esc(ORIENTATION_LABELS[d.displayOrientation] || d.displayOrientation)}</div>` : ''}
+    ${(d.exitGestureTaps !== 5 || d.exitGestureCorner !== 'tl' || d.exitGestureHoldMs !== 0) ? `<div class="pill on" style="margin-top:4px">🤏 יציאה: ${d.exitGestureTaps} הקשות ב${esc(GESTURE_CORNER_LABELS[d.exitGestureCorner] || d.exitGestureCorner)}${d.exitGestureHoldMs ? ` + החזקה ${(d.exitGestureHoldMs / 1000).toFixed(1)}ש׳` : ''}</div>` : ''}
     ${hasAppUpdateAvailable(d) ? `<div class="pill on" style="margin-top:4px">⬆️ עדכון אפליקציה זמין (v${esc(LATEST_APP_VERSION)})</div>` : ''}
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
@@ -497,6 +501,18 @@ const ORIENTATION_LABELS = {
   auto: 'לפי סיבוב המכשיר (לא נכפה)',
 };
 
+// KIOSK_BUILD.md §4 "מחוֹת יציאה מדורגות... הכל ניתן להגדרה בלוח (כמה
+// הקשות, איזו פינה, אורך החזקה, קודים)" — the server-side
+// GESTURE_CORNER_LABELS (src/gesturesettings.js) mirrored here for the
+// console UI, same "duplicated client-side label map" shape as
+// PAYMENT_MODE_INFO/ORIENTATION_LABELS above.
+const GESTURE_CORNER_LABELS = {
+  tl: 'פינה שמאלית עליונה',
+  tr: 'פינה ימנית עליונה',
+  bl: 'פינה שמאלית תחתונה',
+  br: 'פינה ימנית תחתונה',
+};
+
 async function viewDeviceLog(d) {
   const m = modal(`<h3>יומן פעילות — ${esc(d.name)}</h3><p style="color:var(--muted)">טוען…</p>`);
   let detail;
@@ -589,10 +605,21 @@ async function editDevice(d) {
       <select id="pay-mode">${Object.keys(PAYMENT_MODE_INFO).map((k) =>
         `<option value="${k}" ${d.paymentMode === k ? 'selected' : ''}>${esc(PAYMENT_MODE_INFO[k].label)}</option>`).join('')}</select>
       <div id="pay-note" style="font-size:12px;color:var(--muted);margin-top:4px">${esc((PAYMENT_MODE_INFO[d.paymentMode] || {}).note || '')}</div></div>
-    <div class="field"><label>קוד תחזוקה מקומי (5 הקשות בפינת המסך)</label>
+    <div class="field"><label>קוד תחזוקה מקומי (מוקלד אחרי מחוות ההקשה בפינה, ראו למטה)</label>
       <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
       <div style="font-size:12px;color:var(--muted);margin-top:-8px">
         לפחות 4 תווים, לא רצף ולא תו חוזר (למשל 1234 או 1111). השאירו ריק כדי לבטל.</div>
+    <div class="field"><label>מחוות יציאה בפינת המסך (§4 — כמה הקשות, איזו פינה, אורך החזקה)</label>
+      <div class="row" style="gap:8px">
+        <div style="flex:1"><label style="font-size:12px">מספר הקשות</label>
+          <input id="gest-taps" type="number" min="3" max="10" value="${d.exitGestureTaps ?? 5}" dir="ltr" /></div>
+        <div style="flex:1"><label style="font-size:12px">פינה</label>
+          <select id="gest-corner">${Object.keys(GESTURE_CORNER_LABELS).map((k) =>
+            `<option value="${k}" ${(d.exitGestureCorner || 'tl') === k ? 'selected' : ''}>${esc(GESTURE_CORNER_LABELS[k])}</option>`).join('')}</select></div>
+        <div style="flex:1"><label style="font-size:12px">אורך החזקה (מילישניות; 0 = ללא החזקה)</label>
+          <input id="gest-hold" type="number" min="0" max="5000" step="100" value="${d.exitGestureHoldMs ?? 0}" dir="ltr" /></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">ההקשה האחרונה חייבת להישאר לחוצה במשך אורך ההחזקה כדי להשלים את המחווה; שחרור מוקדם מאפס את הספירה. פותח את מסך הבחירה (עמוד הבית / לקוחות מאושרים); יציאה מלאה עדיין דורשת את הקוד למעלה.</div></div>
     <div class="field"><label>לקוחות מאושרים למכשיר זה (§2★ה — הזנת המזהה במכשיר תפתח רק את אלה)</label>
       <div id="cl-approve">טוען…</div></div>
     <div class="field"><label>גיבוי/שחזור מדיניות (כל שמירה מגבה אוטומטית את המצב הקודם)</label>
@@ -631,7 +658,9 @@ async function editDevice(d) {
       scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value,
       signageEnabled, signageUrls: $('#sig-urls', m).value, signageIntervalSeconds: Number($('#sig-interval', m).value),
       maintenanceEnabled, maintenanceMessage: $('#maint-msg', m).value,
-      paymentMode: $('#pay-mode', m).value };
+      paymentMode: $('#pay-mode', m).value,
+      exitGestureTaps: Number($('#gest-taps', m).value), exitGestureCorner: $('#gest-corner', m).value,
+      exitGestureHoldMs: Number($('#gest-hold', m).value) };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }
@@ -1073,6 +1102,15 @@ async function viewTemplates() {
       <div class="field"><label><input id="tpl-pay-on" type="checkbox" /> כלול אמצעי תשלום בתבנית (§7)</label>
         <select id="tpl-pay-mode" style="display:none;margin-top:6px">${Object.keys(PAYMENT_MODE_INFO).map((k) =>
           `<option value="${k}">${esc(PAYMENT_MODE_INFO[k].label)}</option>`).join('')}</select></div>
+      <div class="field"><label><input id="tpl-gest-on" type="checkbox" /> כלול מחוות יציאה בתבנית (§4)</label>
+        <div id="tpl-gest-fields" style="display:none;margin-top:6px">
+          <div style="display:flex;gap:8px">
+            <div style="flex:1"><label style="font-size:12px">מספר הקשות</label><input id="tpl-gest-taps" type="number" min="3" max="10" value="5" dir="ltr" /></div>
+            <div style="flex:1"><label style="font-size:12px">פינה</label>
+              <select id="tpl-gest-corner">${Object.keys(GESTURE_CORNER_LABELS).map((k) =>
+                `<option value="${k}">${esc(GESTURE_CORNER_LABELS[k])}</option>`).join('')}</select></div>
+            <div style="flex:1"><label style="font-size:12px">החזקה (מ״ש)</label><input id="tpl-gest-hold" type="number" min="0" max="5000" step="100" value="0" dir="ltr" /></div>
+          </div></div></div>
       <button class="btn btn-primary" id="tpl-create">שמור תבנית</button>
     </div>
     <div class="card" style="max-width:680px"><h3>התבניות שלי</h3><div id="tpl-list">טוען…</div></div>`;
@@ -1084,6 +1122,7 @@ async function viewTemplates() {
   $('#tpl-sig-on').onchange = (e) => { $('#tpl-sig-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-maint-on').onchange = (e) => { $('#tpl-maint-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-pay-on').onchange = (e) => { $('#tpl-pay-mode').style.display = e.target.checked ? 'block' : 'none'; };
+  $('#tpl-gest-on').onchange = (e) => { $('#tpl-gest-fields').style.display = e.target.checked ? 'block' : 'none'; };
 
   $('#tpl-create').onclick = async () => {
     const name = $('#tpl-name').value.trim();
@@ -1110,6 +1149,11 @@ async function viewTemplates() {
       body.maintenanceMessage = $('#tpl-maint-msg').value;
     }
     if ($('#tpl-pay-on').checked) body.paymentMode = $('#tpl-pay-mode').value;
+    if ($('#tpl-gest-on').checked) {
+      body.exitGestureTaps = Number($('#tpl-gest-taps').value);
+      body.exitGestureCorner = $('#tpl-gest-corner').value;
+      body.exitGestureHoldMs = Number($('#tpl-gest-hold').value);
+    }
     const btn = $('#tpl-create');
     btn.disabled = true;
     try { await api('/templates', { method: 'POST', body: JSON.stringify(body) }); toast('התבנית נשמרה'); viewTemplates(); }
@@ -1132,6 +1176,9 @@ function templateSummary(t) {
   if (t.signageEnabled != null) parts.push(t.signageEnabled ? 'מצב תצוגה' : 'כיבוי תצוגה');
   if (t.maintenanceEnabled != null) parts.push(t.maintenanceEnabled ? 'מצב תחזוקה' : 'החזרה לשירות');
   if (t.paymentMode != null) parts.push(`תשלום: ${(PAYMENT_MODE_INFO[t.paymentMode] || {}).label || t.paymentMode}`);
+  if (t.exitGestureTaps != null || t.exitGestureCorner != null || t.exitGestureHoldMs != null) {
+    parts.push(`מחוות יציאה: ${t.exitGestureTaps ?? 5} הקשות ב${GESTURE_CORNER_LABELS[t.exitGestureCorner] || t.exitGestureCorner || 'tl'}`);
+  }
   return parts.length ? parts.join(' · ') : 'תבנית ריקה';
 }
 

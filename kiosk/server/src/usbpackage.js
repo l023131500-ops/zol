@@ -81,7 +81,7 @@ export function sanitizeApkFilename(raw) {
  */
 export function buildOfflineEnrollPayload({
   deviceToken, name, homeUrl, allowedHost, idleReturnSeconds, adminCode, displayZoomPercent,
-  displayOrientation, approvedClients,
+  displayOrientation, approvedClients, exitGestureTaps, exitGestureCorner, exitGestureHoldMs,
 } = {}) {
   if (!deviceToken) throw new Error('deviceToken is required');
   if (!homeUrl) throw new Error('homeUrl is required');
@@ -96,6 +96,13 @@ export function buildOfflineEnrollPayload({
       displayZoomPercent: displayZoomPercent ?? 100,
       displayOrientation: displayOrientation || 'landscape',
       approvedClients: approvedClients ?? [],
+      // KIOSK_BUILD.md §4 — same "must work fully offline" reasoning as
+      // every other field above: a Route D device never phones home before
+      // it is already locked, so its gesture settings must travel in this
+      // one envelope like the rest, not be fetched separately.
+      exitGestureTaps: exitGestureTaps ?? 5,
+      exitGestureCorner: exitGestureCorner || 'tl',
+      exitGestureHoldMs: exitGestureHoldMs ?? 0,
     },
   };
 }
@@ -115,6 +122,7 @@ export function buildOfflineEnrollPayload({
 export function buildUsbOfflineScript({
   serial, deviceName, homeUrl, allowedHost, deviceToken, idleReturnSeconds,
   adminCode, displayZoomPercent, displayOrientation, approvedClients, apkFilename,
+  exitGestureTaps, exitGestureCorner, exitGestureHoldMs,
 } = {}) {
   const cleanSerial = sanitizeSerial(serial);
   if (!cleanSerial) throw new Error('serial is required');
@@ -125,6 +133,7 @@ export function buildUsbOfflineScript({
   const payload = buildOfflineEnrollPayload({
     deviceToken, name: deviceName, homeUrl, allowedHost, idleReturnSeconds,
     adminCode, displayZoomPercent, displayOrientation, approvedClients,
+    exitGestureTaps, exitGestureCorner, exitGestureHoldMs,
   });
   const configJson = JSON.stringify(payload, null, 2);
   // Comment-safe (CR/LF stripped so it cannot break out of a `#` line) but

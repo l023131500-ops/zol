@@ -42,6 +42,11 @@
 // `display_zoom_percent` right next to it: on-device enforcement, not a
 // secret, and the console needs it to render the current selection in the
 // device-edit form.
+// `exit_gesture_taps`/`exit_gesture_corner`/`exit_gesture_hold_ms`
+// (KIOSK_BUILD.md §4) are on the same footing as `display_orientation`
+// above: on-device enforcement (the corner-tap gesture), not a secret, and
+// the console needs them to render the current selection in the device-edit
+// form.
 export const CONSOLE_DEVICE_FIELDS = [
   'id', 'owner_id', 'owner_name', 'serial', 'name', 'allowed_host', 'home_url',
   'idle_return_seconds', 'status', 'online', 'last_seen', 'app_version',
@@ -50,6 +55,7 @@ export const CONSOLE_DEVICE_FIELDS = [
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
   'maintenance_enabled', 'maintenance_message', 'access_code', 'payment_mode',
+  'exit_gesture_taps', 'exit_gesture_corner', 'exit_gesture_hold_ms',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */

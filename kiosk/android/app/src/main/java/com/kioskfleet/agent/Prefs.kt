@@ -34,6 +34,16 @@ object Prefs {
     // and KioskApp.onCreate() can flush it then. Empty = nothing pending.
     const val PENDING_WATCHDOG_REASON = "pending_watchdog_reason"
     const val PENDING_WATCHDOG_DETAIL = "pending_watchdog_detail"
+    // KIOSK_BUILD.md §4 "מחוֹת יציאה מדורגות... הכל ניתן להגדרה בלוח (כמה
+    // הקשות, איזו פינה, אורך החזקה, קודים)": the corner-tap gesture itself
+    // was hardcoded until now (5 taps, top-left only, no hold). Read fresh
+    // from Prefs at gesture-check time in KioskActivity, the same
+    // "read-at-use, not cached" shape ADMIN_CODE already uses. Empty (a
+    // device enrolled before these keys existed) is read as
+    // 5/"tl"/0 by every call site — exactly what every device already does.
+    const val EXIT_GESTURE_TAPS = "exit_gesture_taps"
+    const val EXIT_GESTURE_CORNER = "exit_gesture_corner"      // "tl"|"tr"|"bl"|"br"
+    const val EXIT_GESTURE_HOLD_MS = "exit_gesture_hold_ms"
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 

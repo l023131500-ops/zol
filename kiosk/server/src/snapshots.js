@@ -19,6 +19,7 @@ export const SNAPSHOT_COLUMNS = [
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
   'maintenance_enabled', 'maintenance_message', 'payment_mode',
+  'exit_gesture_taps', 'exit_gesture_corner', 'exit_gesture_hold_ms',
 ];
 
 // Oldest trimmed first once a device passes this many snapshots — an
@@ -42,6 +43,7 @@ const POLICY_BODY_KEYS = [
   'scheduleEnabled', 'scheduleOpenTime', 'scheduleCloseTime',
   'signageEnabled', 'signageUrls', 'signageIntervalSeconds',
   'maintenanceEnabled', 'maintenanceMessage', 'paymentMode',
+  'exitGestureTaps', 'exitGestureCorner', 'exitGestureHoldMs',
 ];
 
 /**

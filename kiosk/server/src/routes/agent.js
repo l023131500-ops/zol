@@ -114,6 +114,13 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       // enrolls it (a technician prepping a unit that will not go live
       // yet), and enrollment is the first response this device ever reads.
       maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
+      // KIOSK_BUILD.md §4: same "must land on its own" reasoning as
+      // adminCode above — a device's very first read of its policy is this
+      // enroll response, not a later update_config, so a custom exit-gesture
+      // set before this device was ever enrolled must already be here.
+      exitGestureTaps: device.exit_gesture_taps ?? 5,
+      exitGestureCorner: device.exit_gesture_corner || 'tl',
+      exitGestureHoldMs: device.exit_gesture_hold_ms ?? 0,
     },
   });
 });
@@ -153,6 +160,9 @@ router.post('/heartbeat', (req, res) => {
       signageEnabled: !!fresh.signage_enabled, signageUrls: fresh.signage_urls || '',
       signageIntervalSeconds: fresh.signage_interval_seconds,
       maintenanceEnabled: !!fresh.maintenance_enabled, maintenanceMessage: fresh.maintenance_message || '',
+      exitGestureTaps: fresh.exit_gesture_taps ?? 5,
+      exitGestureCorner: fresh.exit_gesture_corner || 'tl',
+      exitGestureHoldMs: fresh.exit_gesture_hold_ms ?? 0,
     },
     commands,
   });

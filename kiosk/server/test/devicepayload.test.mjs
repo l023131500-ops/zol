@@ -20,6 +20,7 @@ const ROW = {
   schedule_last_state: 'on',
   signage_enabled: 1, signage_urls: 'https://example.com/promo1\nhttps://example.com/promo2',
   signage_interval_seconds: 20, access_code: 'AB23CD', payment_mode: 'manual',
+  exit_gesture_taps: 7, exit_gesture_corner: 'br', exit_gesture_hold_ms: 1500,
 };
 
 test('device_token never survives the merge into a console frame', () => {
@@ -89,4 +90,11 @@ test('payment_mode (§7) survives — never pushed via update_config, so this is
 test('display_orientation (§5) survives — the console needs it to render the device-edit form', () => {
   const out = consoleDevice(ROW, {});
   assert.equal(out.display_orientation, 'portrait');
+});
+
+test('exit_gesture_taps/corner/hold_ms (§4) survive — the console needs them to render the device-edit form', () => {
+  const out = consoleDevice(ROW, {});
+  assert.equal(out.exit_gesture_taps, 7);
+  assert.equal(out.exit_gesture_corner, 'br');
+  assert.equal(out.exit_gesture_hold_ms, 1500);
 });
