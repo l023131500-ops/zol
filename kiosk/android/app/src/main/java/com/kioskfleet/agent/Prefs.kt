@@ -24,6 +24,15 @@ object Prefs {
     // the console, distinct from ADMIN_CODE (the *local* corner-tap code).
     const val MAINTENANCE_ENABLED = "maintenance_enabled"  // "1"/"0"
     const val MAINTENANCE_MESSAGE = "maintenance_message"  // customer-facing text; empty = use the on-device default
+    // KIOSK_BUILD.md §9 "תזמון": business-hours screen scheduling, cached so
+    // the device can work out its own current on/off state offline (see
+    // KioskActivity.applyScheduleState()) instead of depending solely on a
+    // live screen_on/screen_off command reaching it at the exact minute the
+    // window flips — the same "must survive a reboot with no network" bar
+    // MAINTENANCE_ENABLED above already holds.
+    const val SCHEDULE_ENABLED    = "schedule_enabled"     // "1"/"0"
+    const val SCHEDULE_OPEN_TIME  = "schedule_open_time"   // "HH:MM", empty = not configured
+    const val SCHEDULE_CLOSE_TIME = "schedule_close_time"  // "HH:MM", empty = not configured
     // KIOSK_BUILD.md §0/§8 watchdog: a crash/stuck-reboot report Watchdog.kt
     // could not reach the network from (the process is mid-crash, or about
     // to reboot) — persisted here so it survives to the next process start

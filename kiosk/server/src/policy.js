@@ -55,6 +55,14 @@ export function pushConfigUpdate(device, userId) {
     signageEnabled: !!device.signage_enabled, signageUrls: device.signage_urls || '',
     signageIntervalSeconds: device.signage_interval_seconds,
     maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
+    // KIOSK_BUILD.md §9 "תזמון": the device must be able to enforce its own
+    // business-hours screen state offline (see schedule.js's header comment
+    // on index.js's sweep interval) rather than depend solely on a live
+    // screen_on/screen_off command reaching it at the exact minute the
+    // window flips — the same "must land on its own" reasoning maintenance*
+    // above already carries.
+    scheduleEnabled: !!device.schedule_enabled, scheduleOpenTime: device.schedule_open_time || '',
+    scheduleCloseTime: device.schedule_close_time || '',
   }, userId ?? null);
 }
 

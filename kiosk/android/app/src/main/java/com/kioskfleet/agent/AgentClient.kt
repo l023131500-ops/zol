@@ -175,18 +175,37 @@ class AgentClient(
                     Prefs.set(ctx, Prefs.MAINTENANCE_ENABLED, maintenanceEnabled)
                     Prefs.set(ctx, Prefs.MAINTENANCE_MESSAGE, maintenanceMessage)
                 }
+                // KIOSK_BUILD.md §9 "תזמון": same "must land on its own" shape as
+                // maintenance above — persisted every heartbeat regardless of
+                // whether homeUrl changed, so a device that reconnects (or
+                // reboots) between heartbeats can work out its own current
+                // screen state from Prefs alone (KioskActivity.applyScheduleState())
+                // rather than waiting for index.js's next 60s sweep to notice and
+                // issue a fresh screen_on/screen_off.
+                val scheduleEnabled = if (cfg.optBoolean("scheduleEnabled",
+                        Prefs.get(ctx, Prefs.SCHEDULE_ENABLED, "0") == "1")) "1" else "0"
+                val scheduleOpen = cfg.optString("scheduleOpenTime", Prefs.get(ctx, Prefs.SCHEDULE_OPEN_TIME, ""))
+                val scheduleClose = cfg.optString("scheduleCloseTime", Prefs.get(ctx, Prefs.SCHEDULE_CLOSE_TIME, ""))
+                val scheduleChanged = scheduleEnabled != Prefs.get(ctx, Prefs.SCHEDULE_ENABLED, "0") ||
+                    scheduleOpen != Prefs.get(ctx, Prefs.SCHEDULE_OPEN_TIME, "") ||
+                    scheduleClose != Prefs.get(ctx, Prefs.SCHEDULE_CLOSE_TIME, "")
+                if (scheduleChanged) {
+                    Prefs.set(ctx, Prefs.SCHEDULE_ENABLED, scheduleEnabled)
+                    Prefs.set(ctx, Prefs.SCHEDULE_OPEN_TIME, scheduleOpen)
+                    Prefs.set(ctx, Prefs.SCHEDULE_CLOSE_TIME, scheduleClose)
+                }
                 if (home.isNotEmpty()) {
                     val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
                         host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
                         idle.toString() != Prefs.get(ctx, Prefs.IDLE_RETURN) ||
-                        zoomChanged || maintenanceChanged
+                        zoomChanged || maintenanceChanged || scheduleChanged
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
                     if (changed) ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
-                } else if (zoomChanged || maintenanceChanged) {
+                } else if (zoomChanged || maintenanceChanged || scheduleChanged) {
                     // No home-link change to carry the update, but the zoom/
-                    // maintenance state still has to reach the on-screen WebView.
+                    // maintenance/schedule state still has to reach the on-screen WebView.
                     ui.post { handler.onConfigUpdated(Prefs.get(ctx, Prefs.HOME_URL), Prefs.get(ctx, Prefs.ALLOWED_HOST), idle, zoom) }
                 }
             }
@@ -252,6 +271,14 @@ class AgentClient(
                     val maintenanceEnabled = if (payload.optBoolean("maintenanceEnabled",
                             Prefs.get(ctx, Prefs.MAINTENANCE_ENABLED, "0") == "1")) "1" else "0"
                     val maintenanceMessage = payload.optString("maintenanceMessage", Prefs.get(ctx, Prefs.MAINTENANCE_MESSAGE, ""))
+                    // KIOSK_BUILD.md §9 "תזמון": same silent-persist shape as
+                    // maintenance above — applyScheduleState() (KioskActivity) is
+                    // read from Prefs directly inside onConfigUpdated() below, no
+                    // new CommandHandler parameter needed.
+                    val scheduleEnabled = if (payload.optBoolean("scheduleEnabled",
+                            Prefs.get(ctx, Prefs.SCHEDULE_ENABLED, "0") == "1")) "1" else "0"
+                    val scheduleOpen = payload.optString("scheduleOpenTime", Prefs.get(ctx, Prefs.SCHEDULE_OPEN_TIME, ""))
+                    val scheduleClose = payload.optString("scheduleCloseTime", Prefs.get(ctx, Prefs.SCHEDULE_CLOSE_TIME, ""))
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
@@ -263,6 +290,9 @@ class AgentClient(
                     Prefs.set(ctx, Prefs.SIGNAGE_INTERVAL, signageInterval.toString())
                     Prefs.set(ctx, Prefs.MAINTENANCE_ENABLED, maintenanceEnabled)
                     Prefs.set(ctx, Prefs.MAINTENANCE_MESSAGE, maintenanceMessage)
+                    Prefs.set(ctx, Prefs.SCHEDULE_ENABLED, scheduleEnabled)
+                    Prefs.set(ctx, Prefs.SCHEDULE_OPEN_TIME, scheduleOpen)
+                    Prefs.set(ctx, Prefs.SCHEDULE_CLOSE_TIME, scheduleClose)
                     ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }

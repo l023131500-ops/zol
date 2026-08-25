@@ -109,6 +109,13 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       // enrolls it (a technician prepping a unit that will not go live
       // yet), and enrollment is the first response this device ever reads.
       maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
+      // KIOSK_BUILD.md §9 "תזמון": a device enrolled with a schedule already
+      // configured on its template/enrollment-derived row (or re-enrolling
+      // hardware) must know its own business hours from the first screen it
+      // ever shows, offline, the same reasoning as maintenanceEnabled above
+      // rather than waiting for the next sweep tick in index.js.
+      scheduleEnabled: !!device.schedule_enabled, scheduleOpenTime: device.schedule_open_time || '',
+      scheduleCloseTime: device.schedule_close_time || '',
     },
   });
 });
@@ -147,6 +154,13 @@ router.post('/heartbeat', (req, res) => {
       signageEnabled: !!fresh.signage_enabled, signageUrls: fresh.signage_urls || '',
       signageIntervalSeconds: fresh.signage_interval_seconds,
       maintenanceEnabled: !!fresh.maintenance_enabled, maintenanceMessage: fresh.maintenance_message || '',
+      // KIOSK_BUILD.md §9 "תזמון" — see pushConfigUpdate's own comment
+      // (policy.js) for why this has to ride along on every heartbeat, not
+      // only the live screen_on/screen_off command index.js's sweep issues:
+      // a device that reconnects (or reboots) mid-window must be able to
+      // work out its own current screen state from this alone.
+      scheduleEnabled: !!fresh.schedule_enabled, scheduleOpenTime: fresh.schedule_open_time || '',
+      scheduleCloseTime: fresh.schedule_close_time || '',
     },
     commands,
   });
