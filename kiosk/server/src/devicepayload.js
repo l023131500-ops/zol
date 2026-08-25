@@ -28,6 +28,12 @@
 // (KIOSK_BUILD.md §9 "תזמון"), not something a console needs to render —
 // `schedule_enabled`/`schedule_open_time`/`schedule_close_time` alone tell the
 // owner what is configured.
+// `access_code` (KIOSK_BUILD.md §2★ז) is included on the same footing as
+// `exit_code` above it: not secret enough to withhold from the owner's own
+// console (it is *meant* to be copied out and handed to a technician), but
+// only useful there — same "device-scoped credential the owner needs to see
+// to use the feature" shape, not the unconditional device_token the
+// original comment above is about withholding.
 export const CONSOLE_DEVICE_FIELDS = [
   'id', 'owner_id', 'owner_name', 'serial', 'name', 'allowed_host', 'home_url',
   'idle_return_seconds', 'status', 'online', 'last_seen', 'app_version',
@@ -35,7 +41,7 @@ export const CONSOLE_DEVICE_FIELDS = [
   'last_screenshot_at', 'display_zoom_percent',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
-  'maintenance_enabled', 'maintenance_message',
+  'maintenance_enabled', 'maintenance_message', 'access_code',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */

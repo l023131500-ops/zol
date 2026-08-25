@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
+import { generateAccessCode } from './accesscode.js';
 
 // Whether the database survived the last restart is the single most important
 // fact about this deployment, and it is invisible from the outside until a
@@ -258,6 +259,27 @@ ensureColumn('templates', 'maintenance_enabled', 'maintenance_enabled INTEGER');
 ensureColumn('templates', 'maintenance_message', 'maintenance_message TEXT');
 ensureColumn('policy_snapshots', 'maintenance_enabled', 'maintenance_enabled INTEGER');
 ensureColumn('policy_snapshots', 'maintenance_message', 'maintenance_message TEXT');
+// KIOSK_BUILD.md §2★ז "device access-code + unauthenticated launcher page"
+// (GET /k/:code — routes/launcher.js). NULL on every existing row, the
+// honest value: no code existed anywhere in this codebase before this
+// column (see STATUS.md's most recent housekeeping finding). Backfilled
+// below rather than left to a lazy on-read generator, so every device —
+// including ones nobody opens the console for again — has a working code
+// immediately after this migration runs, not only after its next edit.
+ensureColumn('devices', 'access_code', 'access_code TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_access_code ON devices(access_code) WHERE access_code IS NOT NULL');
+
+/** A fresh access code guaranteed not to collide with any row already in the table. */
+export function nextAccessCode() {
+  for (;;) {
+    const code = generateAccessCode();
+    if (!db.prepare('SELECT 1 FROM devices WHERE access_code = ?').get(code)) return code;
+  }
+}
+
+for (const row of db.prepare('SELECT id FROM devices WHERE access_code IS NULL').all()) {
+  db.prepare('UPDATE devices SET access_code = ? WHERE id = ?').run(nextAccessCode(), row.id);
+}
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(

@@ -326,7 +326,8 @@ function mapDevice(d) {
     signageUrls: d.signage_urls || d.signageUrls || '',
     signageIntervalSeconds: d.signage_interval_seconds ?? d.signageIntervalSeconds ?? 15,
     maintenanceEnabled: d.maintenance_enabled === 1 || d.maintenance_enabled === true || d.maintenanceEnabled === true,
-    maintenanceMessage: d.maintenance_message || d.maintenanceMessage || '' };
+    maintenanceMessage: d.maintenance_message || d.maintenanceMessage || '',
+    accessCode: d.access_code || d.accessCode || '' };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -381,7 +382,7 @@ function deviceCard(d) {
     ${d.maintenanceEnabled ? `<div class="pill off" style="margin-top:4px">🛠 בתחזוקה מרחוק${d.maintenanceMessage ? ' — ' + esc(d.maintenanceMessage) : ''}</div>` : ''}
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
-      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}</div>
+      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}${d.accessCode ? `<br/>🚪 קוד בחירה: <b>${esc(d.accessCode)}</b>` : ''}</div>
     <div class="actions"></div></div>`);
   const acts = $('.actions', c);
   const mk = (label, fn, cls = 'btn-light') => { const b = el(`<button class="btn ${cls} btn-sm">${label}</button>`); b.onclick = fn; acts.appendChild(b); };
@@ -395,9 +396,40 @@ function deviceCard(d) {
   if (d.lastScreenshotAt) mk('🖼️ צילום אחרון', () => viewScreenshot(d));
   mk('📋 יומן', () => viewDeviceLog(d));
   mk('🪟 חבילת Windows', () => downloadFile(`/devices/${d.id}/windows-package`, `kioskfleet-${d.serial}.ps1`).catch((e) => toast(e.message, false)));
+  // KIOSK_BUILD.md §2★ז: the launcher page (public/launcher.html) reads its
+  // code back out of the URL path itself (see js/launcher.js), so the link
+  // this copies is the whole self-sufficient thing a technician needs — no
+  // separate "now type this code in" step.
+  if (d.accessCode) mk('🚪 העתקת קישור בחירה', () => copyLauncherLink(d));
+  mk('🔄 קוד בחירה חדש', () => regenerateAccessCode(d));
   mk('✏️ עריכה', () => editDevice(d));
   mk('🗑️', () => confirmDelete(d), 'btn-danger');
   return c;
+}
+
+// KIOSK_BUILD.md §2★ז — copies the full GET /k/:code URL, not just the bare
+// code: someone forwarding this over WhatsApp/SMS wants a tap-to-open link,
+// not one more thing to retype. location.origin (not BASE alone) so the
+// link is absolute and works from any app it gets pasted into.
+async function copyLauncherLink(d) {
+  const url = `${location.origin}${BASE}/k/${d.accessCode}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('קישור הבחירה הועתק');
+  } catch {
+    // Clipboard API needs a secure context/permission that is not always
+    // available (older WebView, non-HTTPS local dev) — surface the link
+    // itself rather than a silent failure the owner cannot act on.
+    window.prompt('העתיקו את הקישור:', url);
+  }
+}
+async function regenerateAccessCode(d) {
+  if (!confirm('קוד הבחירה הישן יפסיק לעבוד מיד. להנפיק קוד חדש?')) return;
+  try {
+    await api(`/devices/${d.id}/access-code/regenerate`, { method: 'POST' });
+    toast('קוד בחירה חדש הונפק');
+    loadDevices();
+  } catch (e) { toast(e.message, false); }
 }
 
 // ── DEVICE ACTIVITY LOG (KIOSK_BUILD.md §9 "יומן אירועים לכל מכשיר") ────
@@ -412,6 +444,7 @@ const EVENT_LABELS = {
   client_identified: 'זוהה לקוח במכשיר', client_approved: 'לקוח אושר למכשיר', client_revoked: 'אישור לקוח בוטל',
   template_applied: 'תבנית הוחלה על המכשיר',
   snapshot_saved: 'גיבוי מדיניות נשמר', snapshot_restored: 'שוחזר גיבוי מדיניות',
+  launcher_opened: 'קישור הבחירה נפתח (§2★ז)', access_code_regenerated: 'קוד בחירה הונפק מחדש',
 };
 const COMMAND_LABELS = {
   reboot: 'אתחול', reload: 'רענון', set_url: 'החלפת כתובת', screen_on: 'הדלקת מסך', screen_off: 'כיבוי מסך',
