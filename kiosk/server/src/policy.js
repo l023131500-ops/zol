@@ -12,6 +12,7 @@ import { notifyConsolesOfDevice } from './hub.js';
 import { issueCommand } from './commands.js';
 import { hostsForUrl, normalizeHostCsv, parseHosts, normalizeHomeUrl } from './hosts.js';
 import { validateExitCode } from './exitcode.js';
+import { validateDeviceName } from './devicename.js';
 import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
@@ -77,6 +78,15 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
         scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
         signageEnabled, signageUrls, signageIntervalSeconds,
         maintenanceEnabled, maintenanceMessage } = body || {};
+
+  // Validated up front like exitCode just below: `name` used to go straight
+  // from req.body into `name ?? null` at the bottom of this function with no
+  // type check at all, unlike every other field here — an object/array/
+  // boolean value reaches better-sqlite3's bind and crashes with a raw 500
+  // (reproduced live via PATCH /devices/:id) instead of a clean 400.
+  const nameCheck = validateDeviceName(name);
+  if (!nameCheck.ok) return { ok: false, status: 400, error: nameCheck.error };
+  const nameValue = nameCheck.value;
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
@@ -217,7 +227,7 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
      signage_interval_seconds = COALESCE(?, signage_interval_seconds),
      maintenance_enabled = COALESCE(?, maintenance_enabled),
      maintenance_message = CASE WHEN ? = 1 THEN ? ELSE maintenance_message END WHERE id = ?`)
-    .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
+    .run(nameValue ?? null, homeUrl ?? null, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
          exitCodeValue,
          displayZoomPercent != null ? clampZoomPercent(displayZoomPercent) : null,
