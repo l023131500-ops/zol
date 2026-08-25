@@ -70,3 +70,28 @@ export function normalizeHostList(input) {
 export function normalizeHostCsv(input) {
   return normalizeHostList(input).join(',');
 }
+
+/**
+ * Validate + trim a URL meant to become a device's `home_url` — the address
+ * the kiosk WebView actually loads (at enrollment, on idle-return, on every
+ * reboot, and on a `set_url` command). Every one of those call sites used to
+ * accept anything `new URL()` would parse without throwing, or (for
+ * `set_url`) checked only that the *host* was on the allow-list — neither
+ * catches a `javascript:`/`data:` URL, and `new URL('javascript://x').host`
+ * is non-empty (a bare-host check alone actually passes it), so a value that
+ * looks configured can still be script running in the one browser the device
+ * is supposed to be fenced to.
+ *
+ * `undefined` means "not sent" (the caller's own COALESCE decides what that
+ * means — leave the existing value alone); every other case must resolve to
+ * either a clean http(s) URL or a rejection, never a silent pass-through.
+ */
+export function normalizeHomeUrl(raw) {
+  if (raw === undefined) return { ok: true, value: undefined };
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed) return { ok: true, value: '' }; // explicit clear — unchanged from today's behaviour
+  let parsed;
+  try { parsed = new URL(trimmed); } catch { return { ok: false, reason: 'invalid' }; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { ok: false, reason: 'scheme' };
+  return { ok: true, value: trimmed };
+}

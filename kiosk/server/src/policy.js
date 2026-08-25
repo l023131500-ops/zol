@@ -10,7 +10,7 @@
 import { db, logEvent, approvedClientsForDevice } from './db.js';
 import { notifyConsolesOfDevice } from './hub.js';
 import { issueCommand } from './commands.js';
-import { hostsForUrl, normalizeHostCsv, parseHosts } from './hosts.js';
+import { hostsForUrl, normalizeHostCsv, parseHosts, normalizeHomeUrl } from './hosts.js';
 import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
@@ -146,13 +146,32 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
     maintenanceValues = { enabled: maintenanceEnabled ? 1 : 0, message: v.value };
   }
 
-  // Selecting a link from the library overrides the URL + host set.
+  // Selecting a link from the library overrides the URL + host set. A link
+  // row can predate normalizeHomeUrl() (see hosts.js) — "picked from the
+  // library" is not "already known good" — so it is checked here too, with
+  // its own message: the owner did not type this address and cannot fix it
+  // from this form, so pointing them at "the main site" would send them to
+  // correct a field that is not the problem.
   if (linkId) {
     const link = db.prepare('SELECT * FROM links WHERE id = ? AND owner_id = ?').get(linkId, device.owner_id);
     if (!link) return { ok: false, status: 400, error: 'הקישור לא נמצא בספרייה' };
-    homeUrl = link.url;
+    const checkedLink = normalizeHomeUrl(link.url);
+    if (!checkedLink.ok) {
+      return { ok: false, status: 400, error: 'הקישור שנבחר מהספרייה אינו כתובת תקינה — תקנו אותו ב"ספריית קישורים"' };
+    }
+    homeUrl = checkedLink.value;
     allowedHost = link.allowed_host;
   } else if (homeUrl) {
+    const checkedHome = normalizeHomeUrl(homeUrl);
+    if (!checkedHome.ok) {
+      return {
+        ok: false, status: 400,
+        error: checkedHome.reason === 'scheme'
+          ? 'האתר הראשי חייב להתחיל ב-http:// או ב-https://'
+          : 'האתר הראשי אינו כתובת תקינה',
+      };
+    }
+    homeUrl = checkedHome.value;
     // hostsForUrl always folds the *new* home URL's own host into the result
     // — even when the caller also supplied an explicit allowedHost. Skipping
     // that merge (the previous behaviour whenever allowedHost was truthy) let
