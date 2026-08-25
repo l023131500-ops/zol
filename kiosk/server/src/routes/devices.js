@@ -283,6 +283,7 @@ function publicDevice(d) {
     signageIntervalSeconds: d.signage_interval_seconds ?? 15,
     maintenanceEnabled: !!d.maintenance_enabled, maintenanceMessage: d.maintenance_message || '',
     accessCode: d.access_code || '',
+    paymentMode: d.payment_mode || 'none',
   };
 }
 

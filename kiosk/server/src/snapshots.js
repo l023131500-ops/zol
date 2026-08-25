@@ -17,7 +17,7 @@ export const SNAPSHOT_COLUMNS = [
   'home_url', 'allowed_host', 'idle_return_seconds', 'exit_code', 'display_zoom_percent',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
-  'maintenance_enabled', 'maintenance_message',
+  'maintenance_enabled', 'maintenance_message', 'payment_mode',
 ];
 
 // Oldest trimmed first once a device passes this many snapshots — an
@@ -39,7 +39,7 @@ const POLICY_BODY_KEYS = [
   'homeUrl', 'allowedHost', 'linkId', 'idleReturnSeconds', 'exitCode', 'displayZoomPercent',
   'scheduleEnabled', 'scheduleOpenTime', 'scheduleCloseTime',
   'signageEnabled', 'signageUrls', 'signageIntervalSeconds',
-  'maintenanceEnabled', 'maintenanceMessage',
+  'maintenanceEnabled', 'maintenanceMessage', 'paymentMode',
 ];
 
 /**

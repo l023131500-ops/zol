@@ -25,6 +25,7 @@ function publicTemplate(t) {
     signageUrls: t.signage_urls, signageIntervalSeconds: t.signage_interval_seconds,
     maintenanceEnabled: t.maintenance_enabled == null ? null : !!t.maintenance_enabled,
     maintenanceMessage: t.maintenance_message,
+    paymentMode: t.payment_mode,
   };
 }
 

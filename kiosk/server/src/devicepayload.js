@@ -34,6 +34,10 @@
 // only useful there — same "device-scoped credential the owner needs to see
 // to use the feature" shape, not the unconditional device_token the
 // original comment above is about withholding.
+// `payment_mode` (KIOSK_BUILD.md §7) is not a secret at all — it never rides
+// on update_config (see policy.js's pushConfigUpdate comment), so this is
+// the *only* place it ever reaches a console. Included for the same reason
+// as access_code: the owner needs to see it to use the feature.
 export const CONSOLE_DEVICE_FIELDS = [
   'id', 'owner_id', 'owner_name', 'serial', 'name', 'allowed_host', 'home_url',
   'idle_return_seconds', 'status', 'online', 'last_seen', 'app_version',
@@ -41,7 +45,7 @@ export const CONSOLE_DEVICE_FIELDS = [
   'last_screenshot_at', 'display_zoom_percent',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
-  'maintenance_enabled', 'maintenance_message', 'access_code',
+  'maintenance_enabled', 'maintenance_message', 'access_code', 'payment_mode',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */

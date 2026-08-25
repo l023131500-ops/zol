@@ -18,7 +18,7 @@ const ROW = {
   schedule_enabled: 1, schedule_open_time: '09:00', schedule_close_time: '21:00',
   schedule_last_state: 'on',
   signage_enabled: 1, signage_urls: 'https://example.com/promo1\nhttps://example.com/promo2',
-  signage_interval_seconds: 20, access_code: 'AB23CD',
+  signage_interval_seconds: 20, access_code: 'AB23CD', payment_mode: 'manual',
 };
 
 test('device_token never survives the merge into a console frame', () => {
@@ -78,4 +78,9 @@ test('a live-status payload key not on the allow-list is dropped too', () => {
 test('access_code (§2★ז launcher code) survives — the owner needs to see it to share it', () => {
   const out = consoleDevice(ROW, {});
   assert.equal(out.access_code, 'AB23CD');
+});
+
+test('payment_mode (§7) survives — never pushed via update_config, so this is its only path to a console', () => {
+  const out = consoleDevice(ROW, {});
+  assert.equal(out.payment_mode, 'manual');
 });

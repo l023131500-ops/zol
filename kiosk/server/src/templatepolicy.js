@@ -25,6 +25,7 @@ import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
+import { validatePaymentMode } from './payment.js';
 
 /**
  * Validate + normalize whatever subset of template fields is present in
@@ -107,6 +108,12 @@ export function buildTemplateFields(body) {
     fields.maintenance_message = v.value;
   }
 
+  if (b.paymentMode !== undefined) {
+    const v = validatePaymentMode(b.paymentMode);
+    if (!v.ok) return { error: v.error };
+    fields.payment_mode = v.value;
+  }
+
   return { fields };
 }
 
@@ -139,6 +146,7 @@ export function policyPatchFromTemplate(row) {
     patch.maintenanceEnabled = !!row.maintenance_enabled;
     patch.maintenanceMessage = row.maintenance_message;
   }
+  if (row.payment_mode != null) patch.paymentMode = row.payment_mode;
   return patch;
 }
 
@@ -146,7 +154,7 @@ const TEMPLATE_COLUMNS = [
   'name', 'home_url', 'allowed_host', 'idle_return_seconds', 'exit_code', 'display_zoom_percent',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
-  'maintenance_enabled', 'maintenance_message',
+  'maintenance_enabled', 'maintenance_message', 'payment_mode',
 ];
 
 /** Whitelist used to build a dynamic SQL SET clause — never derived from request input. */

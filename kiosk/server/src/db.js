@@ -268,6 +268,18 @@ ensureColumn('policy_snapshots', 'maintenance_message', 'maintenance_message TEX
 // immediately after this migration runs, not only after its next edit.
 ensureColumn('devices', 'access_code', 'access_code TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_access_code ON devices(access_code) WHERE access_code IS NOT NULL');
+// KIOSK_BUILD.md §7 "תשלום ואמצעי קלט (3 אופציות)": which of the three
+// no-PAN-storage input methods this device's payment flow uses, for the
+// console to show the right instructions/warning (src/payment.js). 'none' on
+// every existing row, the honest value — no payment flow was ever recorded
+// before this column existed, same "NULL/0 means never configured"
+// convention exit_code/maintenance_enabled use above. Console-only metadata,
+// like access_code just above it — see payment.js's own comment for why this
+// never rides on commands.js's update_config payload the way schedule_*/
+// signage_*/maintenance_* do.
+ensureColumn('devices', 'payment_mode', "payment_mode TEXT NOT NULL DEFAULT 'none'");
+ensureColumn('templates', 'payment_mode', 'payment_mode TEXT');
+ensureColumn('policy_snapshots', 'payment_mode', 'payment_mode TEXT');
 
 /** A fresh access code guaranteed not to collide with any row already in the table. */
 export function nextAccessCode() {

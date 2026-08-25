@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTemplateFields, policyPatchFromTemplate, templateColumns } from '../src/templatepolicy.js';
+import { PAYMENT_MODES } from '../src/payment.js';
 
 test('buildTemplateFields on an empty body changes nothing', () => {
   const { fields, error } = buildTemplateFields({});
@@ -108,6 +109,15 @@ test('buildTemplateFields allows disabling maintenance without a message', () =>
   assert.equal(fields.maintenance_message, null);
 });
 
+test('buildTemplateFields accepts every §7 payment mode and rejects an unknown one', () => {
+  for (const mode of PAYMENT_MODES) {
+    const { fields, error } = buildTemplateFields({ paymentMode: mode });
+    assert.equal(error, undefined);
+    assert.equal(fields.payment_mode, mode);
+  }
+  assert.match(buildTemplateFields({ paymentMode: 'bitcoin' }).error, /לא נתמך/);
+});
+
 test('policyPatchFromTemplate includes only the columns a template row actually sets', () => {
   const row = {
     home_url: null, allowed_host: 'example.com', idle_return_seconds: null,
@@ -141,7 +151,20 @@ test('templateColumns is a fixed whitelist, not derived from any request', () =>
   assert.ok(cols.includes('signage_interval_seconds'));
   assert.ok(cols.includes('maintenance_enabled'));
   assert.ok(cols.includes('maintenance_message'));
+  assert.ok(cols.includes('payment_mode'));
   assert.equal(new Set(cols).size, cols.length);
+});
+
+test('policyPatchFromTemplate carries paymentMode only when the template row sets it', () => {
+  const untouched = {
+    home_url: null, allowed_host: null, idle_return_seconds: null, exit_code: null,
+    display_zoom_percent: null, schedule_enabled: null, schedule_open_time: null,
+    schedule_close_time: null, signage_enabled: null, signage_urls: null, signage_interval_seconds: null,
+    payment_mode: null,
+  };
+  assert.deepEqual(policyPatchFromTemplate(untouched), {});
+  const touched = { ...untouched, payment_mode: 'card_reader' };
+  assert.deepEqual(policyPatchFromTemplate(touched), { paymentMode: 'card_reader' });
 });
 
 test('policyPatchFromTemplate carries maintenance fields when the template sets them', () => {
