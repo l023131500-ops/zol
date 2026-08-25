@@ -3,7 +3,7 @@ import { customAlphabet } from 'nanoid';
 import { db, logEvent, approvedClientsForDevice, nextAccessCode } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
-import { hostAllowed, hostsForUrl } from '../hosts.js';
+import { hostAllowed, hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
 import { buildWindowsKioskScript } from '../windowspackage.js';
 import { sanitizeSerial, buildUsbOfflineScript } from '../usbpackage.js';
@@ -159,10 +159,23 @@ router.post('/devices/:id/command', requireAuth, (req, res) => {
   const { type, payload } = req.body || {};
   if (!COMMAND_TYPES.has(type)) return res.status(400).json({ error: 'סוג פקודה לא נתמך' });
   if (type === 'set_url') {
-    let host = '';
-    try { host = new URL(payload?.url).host; } catch { return res.status(400).json({ error: 'כתובת לא תקינה' }); }
+    // A host-only check here used to let `ftp://`/`javascript://` through
+    // whenever its host happened to be on the allow-list (`new URL('javascript://x').host`
+    // is non-empty — a bare host check alone passes it straight to the
+    // device's WebView). normalizeHomeUrl (hosts.js) requires http(s) the
+    // same way PATCH /devices/:id and POST /enrollments now do.
+    const checked = normalizeHomeUrl(payload?.url);
+    if (!checked.ok || !checked.value) {
+      return res.status(400).json({
+        error: checked.reason === 'scheme' ? 'הכתובת חייבת להתחיל ב-http:// או ב-https://' : 'כתובת לא תקינה',
+      });
+    }
+    const host = new URL(checked.value).host;
     if (!hostAllowed(host, device.allowed_host))
       return res.status(400).json({ error: 'הכתובת מחוץ לדומיינים המורשים של המכשיר' });
+    // Send the checked, trimmed value on to the device — not the raw one (a
+    // trailing newline in a pasted address should not reach the WebView).
+    payload.url = checked.value;
   }
   let finalPayload = payload;
   if (type === 'update_app') {
@@ -201,10 +214,24 @@ router.post('/enrollments', requireAuth, (req, res) => {
     if (!link) return res.status(400).json({ error: 'הקישור לא נמצא בספרייה' });
     homeUrl = link.url; allowedHost = link.allowed_host; name = name || link.name;
   }
-  if (!homeUrl) return res.status(400).json({ error: 'בחרו קישור מהספרייה או הזינו כתובת אתר' });
-  let host;
-  try { new URL(homeUrl); } catch { return res.status(400).json({ error: 'כתובת אתר לא תקינה' }); }
-  host = hostsForUrl(homeUrl, allowedHost);
+  // `new URL()` not throwing used to be the entire check — and
+  // `new URL('javascript:alert(1)')` does not throw. This is the *first*
+  // config a fresh device ever reads (before it has any allow-list of its
+  // own to be checked against), so it gets the same http(s)-only rule
+  // PATCH /devices/:id enforces on every edit afterward.
+  const checked = normalizeHomeUrl(homeUrl);
+  if (!checked.ok) {
+    return res.status(400).json({
+      error: linkId
+        ? 'הקישור שנבחר מהספרייה אינו כתובת תקינה — תקנו אותו ב"ספריית קישורים"'
+        : checked.reason === 'scheme'
+          ? 'האתר הראשי חייב להתחיל ב-http:// או ב-https://'
+          : 'כתובת אתר לא תקינה',
+    });
+  }
+  if (!checked.value) return res.status(400).json({ error: 'בחרו קישור מהספרייה או הזינו כתובת אתר' });
+  homeUrl = checked.value;
+  const host = hostsForUrl(homeUrl, allowedHost);
   const idle = Math.max(0, Number(idleReturnSeconds) || 0);
   const code = codeGen();
   const expires = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString();

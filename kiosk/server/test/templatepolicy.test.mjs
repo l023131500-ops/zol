@@ -104,6 +104,19 @@ test('buildTemplateFields rejects a non-URL displayZoomPercent-style bad homeUrl
   assert.equal(buildTemplateFields({ homeUrl: '' }).fields.home_url, null);
 });
 
+test('buildTemplateFields rejects a non-http(s) homeUrl the same way normalizeHomeUrl does everywhere else', () => {
+  // A template's home_url is copied verbatim into a device's home_url the
+  // moment it is applied (policyPatchFromTemplate + POST /templates/:id/apply)
+  // — this door used to only check `new URL()` doesn't throw, which passes
+  // `javascript://x` straight through (its `.host` is non-empty, so even a
+  // host-only check misses it too).
+  assert.equal(buildTemplateFields({ homeUrl: 'javascript://x' }).error, 'האתר הראשי חייב להתחיל ב-http:// או ב-https://');
+  assert.equal(buildTemplateFields({ homeUrl: 'javascript:alert(1)' }).error, 'האתר הראשי חייב להתחיל ב-http:// או ב-https://');
+  assert.equal(buildTemplateFields({ homeUrl: 'data:text/html,<script>1</script>' }).error, 'האתר הראשי חייב להתחיל ב-http:// או ב-https://');
+  assert.equal(buildTemplateFields({ homeUrl: 'ftp://example.com/x' }).error, 'האתר הראשי חייב להתחיל ב-http:// או ב-https://');
+  assert.equal(buildTemplateFields({ homeUrl: '  https://example.com  ' }).fields.home_url, 'https://example.com');
+});
+
 test('buildTemplateFields accepts a maintenance flag+message and rejects an over-long one', () => {
   const ok = buildTemplateFields({ maintenanceEnabled: true, maintenanceMessage: 'בתחזוקה עד הערב' });
   assert.equal(ok.error, undefined);

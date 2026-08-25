@@ -9,7 +9,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseHosts, hostAllowed, hostsForUrl, normalizeHostInput, normalizeHostList, normalizeHostCsv } from '../src/hosts.js';
+import { parseHosts, hostAllowed, hostsForUrl, normalizeHostInput, normalizeHostList, normalizeHostCsv, normalizeHomeUrl } from '../src/hosts.js';
 
 test('a pasted URL becomes the host it contains', () => {
   // This is what people actually paste out of the address bar.
@@ -80,6 +80,38 @@ test('an explicit allow-list that omits the new home host does not survive the m
   assert.ok(parseHosts(merged).includes('newvenue.example.com'));
   assert.ok(parseHosts(merged).includes('totally-unrelated-domain.com'));
   assert.equal(hostAllowed('newvenue.example.com', merged), true);
+});
+
+test('normalizeHomeUrl refuses anything that is not http(s)', () => {
+  // `new URL('javascript:alert(1)')` does not throw, and
+  // `new URL('javascript://x').host` is non-empty — a bare "does it parse" or
+  // "is there a host" check both pass a script URL straight through to the
+  // one field a device's WebView actually loads.
+  assert.equal(normalizeHomeUrl('javascript:alert(document.cookie)').ok, false);
+  assert.equal(normalizeHomeUrl('javascript:alert(document.cookie)').reason, 'scheme');
+  assert.equal(normalizeHomeUrl('javascript://x').ok, false);
+  assert.equal(normalizeHomeUrl('data:text/html,<script>1</script>').ok, false);
+  assert.equal(normalizeHomeUrl('ftp://example.com/x').ok, false);
+  assert.equal(normalizeHomeUrl('ftp://example.com/x').reason, 'scheme');
+});
+
+test('normalizeHomeUrl rejects unparseable input distinctly from a bad scheme', () => {
+  assert.equal(normalizeHomeUrl('not a url').ok, false);
+  assert.equal(normalizeHomeUrl('not a url').reason, 'invalid');
+  assert.equal(normalizeHomeUrl('example.com').ok, false); // no scheme at all — bare host, not a URL
+  assert.equal(normalizeHomeUrl('example.com').reason, 'invalid');
+});
+
+test('normalizeHomeUrl passes a clean http(s) URL through trimmed', () => {
+  const r = normalizeHomeUrl('  https://hall.example.com/lobby \n');
+  assert.equal(r.ok, true);
+  assert.equal(r.value, 'https://hall.example.com/lobby');
+});
+
+test('normalizeHomeUrl treats "not sent" and "explicitly cleared" as distinct from "invalid"', () => {
+  assert.deepEqual(normalizeHomeUrl(undefined), { ok: true, value: undefined });
+  assert.deepEqual(normalizeHomeUrl(''), { ok: true, value: '' });
+  assert.deepEqual(normalizeHomeUrl('   '), { ok: true, value: '' });
 });
 
 test('every write path normalises, not just the device one', () => {
