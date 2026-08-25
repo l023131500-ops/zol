@@ -6,6 +6,7 @@ import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { hostAllowed, hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
 import { validateName } from '../names.js';
+import { isValidRowId } from '../commandid.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -164,6 +165,17 @@ router.post('/enrollments', requireAuth, (req, res) => {
   name = nameCheck.value;
 
   // Pick the locking link from the library, or accept a manual URL.
+  //
+  // Same bindable-rowid gap policy.js's applyDevicePolicy just closed for its
+  // own linkId: this one reached `db.prepare('...WHERE id = ? AND owner_id = ?')
+  // .get(linkId, ...)` on nothing but a truthy check, so an object/array/
+  // boolean linkId crashed the SQL bind with a raw 500 instead of the clean
+  // 400 every other malformed field on this route already gets (reproduced
+  // live). isValidRowId keeps the same "falsy = no link chosen" gate this
+  // line already had.
+  if (linkId && !isValidRowId(linkId)) {
+    return res.status(400).json({ error: 'הקישור לא נמצא בספרייה' });
+  }
   if (linkId) {
     const link = db.prepare('SELECT * FROM links WHERE id = ? AND owner_id = ?').get(linkId, req.user.id);
     if (!link) return res.status(400).json({ error: 'הקישור לא נמצא בספרייה' });

@@ -16,11 +16,17 @@
  * Whether `raw` is shaped like a real autoincrement rowid (a positive
  * integer, or a numeric string of one) — the same bindable-primitive shape
  * validateCommandId requires below, but as a plain boolean with no
- * "falsy = not provided" carve-out, for callers iterating a *list* of ids
- * (routes/templates.js's POST /templates/:id/apply `deviceIds`) where every
- * element is required, not optional, and a non-primitive element must never
- * reach a SQL bind (`db.prepare('...WHERE id = ?').get(id)` throws a raw
- * RangeError/TypeError on an object/array/boolean — reproduced live).
+ * "falsy = not provided" carve-out built in, so a caller decides for itself
+ * whether falsy means "not provided" (policy.js's applyDevicePolicy and
+ * routes/devices.js's POST /enrollments both gate this with their own
+ * `if (linkId && !isValidRowId(linkId))`, preserving linkId's existing
+ * "falsy = no link chosen" behaviour) or whether every value is required, not
+ * optional (routes/templates.js's POST /templates/:id/apply, iterating a
+ * *list* of `deviceIds` where there is no "not provided" case at all). Either
+ * way, a non-primitive value must never reach a SQL bind
+ * (`db.prepare('...WHERE id = ?').get(id)` throws a raw RangeError/TypeError
+ * on an object/array/boolean — reproduced live for both deviceIds and
+ * linkId).
  */
 export function isValidRowId(raw) {
   if (typeof raw !== 'number' && typeof raw !== 'string') return false;

@@ -18,6 +18,7 @@ import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
 import { SNAPSHOT_COLUMNS, MAX_SNAPSHOTS_PER_DEVICE, snapshotFieldsFromDevice, policyFieldsPresent } from './snapshots.js';
+import { isValidRowId } from './commandid.js';
 
 /**
  * Persist `device`'s *current* policy state as a restorable snapshot
@@ -162,6 +163,20 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
   // its own message: the owner did not type this address and cannot fix it
   // from this form, so pointing them at "the main site" would send them to
   // correct a field that is not the problem.
+  //
+  // linkId itself used to reach `db.prepare('...WHERE id = ? AND owner_id = ?')
+  // .get(linkId, ...)` on nothing but a truthy check — the same bindable-rowid
+  // gap already closed for POST /templates/:id/apply's deviceIds elements: an
+  // object/array linkId crashes with RangeError "Too few/many parameter values
+  // were provided", a boolean with TypeError "SQLite3 can only bind numbers,
+  // strings, bigints, buffers, and null" (both reproduced live via PATCH
+  // /devices/:id). isValidRowId keeps the same "falsy = no link chosen" gate
+  // this line already had, so 0/''/null/undefined still skip straight to the
+  // homeUrl branch below; anything else that is not a bindable positive
+  // integer is rejected with a clean 400 instead of reaching the SQL bind.
+  if (linkId && !isValidRowId(linkId)) {
+    return { ok: false, status: 400, error: 'הקישור לא נמצא בספרייה' };
+  }
   if (linkId) {
     const link = db.prepare('SELECT * FROM links WHERE id = ? AND owner_id = ?').get(linkId, device.owner_id);
     if (!link) return { ok: false, status: 400, error: 'הקישור לא נמצא בספרייה' };

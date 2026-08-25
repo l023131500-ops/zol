@@ -3,6 +3,21 @@
  * caller sends as `commandId` on POST /ack and POST /screenshot (routes/agent.js)
  * and a raw SQL bind (`UPDATE commands SET ... WHERE id = ? AND device_id = ?`)
  * that must never receive a non-bindable type.
+ *
+ * isValidRowId() backs two more call sites beyond routes/templates.js's
+ * deviceIds (see below): policy.js's applyDevicePolicy and routes/devices.js's
+ * POST /enrollments each gate their own `linkId` field with
+ * `if (linkId && !isValidRowId(linkId)) return .../400`, preserving linkId's
+ * existing "falsy = no link chosen" behaviour while closing the same
+ * unchecked-bind gap `db.prepare('SELECT * FROM links WHERE id = ? AND
+ * owner_id = ?').get(linkId, ...)` had — an object/array linkId used to crash
+ * with RangeError "Too few/many parameter values were provided", a boolean
+ * with TypeError "SQLite3 can only bind numbers, strings, bigints, buffers,
+ * and null" (both reproduced live via PATCH /devices/:id and POST
+ * /enrollments before this fix). The isValidRowId test cases below already
+ * cover every shape both new call sites reject; only the "falsy still means
+ * not-provided" carve-out is specific to their own `if (linkId && ...)` guard,
+ * not to isValidRowId itself.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -65,5 +80,35 @@ test('isValidRowId rejects objects/arrays/booleans instead of letting them reach
 test('isValidRowId rejects zero, negative numbers, non-integers, NaN, and non-numeric strings', () => {
   for (const bad of [0, -1, -5, 1.5, NaN, Infinity, 'abc', '', null, undefined]) {
     assert.equal(isValidRowId(bad), false, `expected ${JSON.stringify(bad)} to be rejected`);
+  }
+});
+
+/**
+ * The exact guard policy.js's applyDevicePolicy and routes/devices.js's
+ * POST /enrollments now both use in front of their own `linkId` field:
+ * `if (linkId && !isValidRowId(linkId)) return .../400`. Exercised here as
+ * the guard expression itself (not just isValidRowId in isolation) so a
+ * future edit to either call site cannot silently drop the `linkId &&` part
+ * and start rejecting "no link chosen" (falsy) requests too.
+ */
+function linkIdRejected(linkId) {
+  return Boolean(linkId && !isValidRowId(linkId));
+}
+
+test('linkId guard: falsy values (no link chosen) are never rejected, matching linkId\'s pre-existing behaviour', () => {
+  for (const notProvided of [undefined, null, '', 0, false, NaN]) {
+    assert.equal(linkIdRejected(notProvided), false, `expected ${JSON.stringify(notProvided)} to pass through as "no link chosen"`);
+  }
+});
+
+test('linkId guard: a real link id (number or numeric string) is never rejected', () => {
+  for (const good of [1, 42, '7']) {
+    assert.equal(linkIdRejected(good), false, `expected ${JSON.stringify(good)} to pass the guard`);
+  }
+});
+
+test('linkId guard: objects/arrays/true/junk strings are rejected before reaching the SQL bind', () => {
+  for (const bad of [{}, { pwn: 1 }, [], [1, 2, 3], true, 'abc', -1, 1.5]) {
+    assert.equal(linkIdRejected(bad), true, `expected ${JSON.stringify(bad)} to be rejected`);
   }
 });
