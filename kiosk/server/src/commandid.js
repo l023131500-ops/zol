@@ -13,6 +13,22 @@
 // in this checkout without better-sqlite3.
 
 /**
+ * Whether `raw` is shaped like a real autoincrement rowid (a positive
+ * integer, or a numeric string of one) — the same bindable-primitive shape
+ * validateCommandId requires below, but as a plain boolean with no
+ * "falsy = not provided" carve-out, for callers iterating a *list* of ids
+ * (routes/templates.js's POST /templates/:id/apply `deviceIds`) where every
+ * element is required, not optional, and a non-primitive element must never
+ * reach a SQL bind (`db.prepare('...WHERE id = ?').get(id)` throws a raw
+ * RangeError/TypeError on an object/array/boolean — reproduced live).
+ */
+export function isValidRowId(raw) {
+  if (typeof raw !== 'number' && typeof raw !== 'string') return false;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0;
+}
+
+/**
  * Validates an optional command id. `commandId` is a `commands.id` autoincrement
  * rowid — always a positive integer once real. A falsy value (`undefined`,
  * `null`, `''`, `0`) is treated as "not provided", the same truthy gate both

@@ -6,7 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateCommandId } from '../src/commandid.js';
+import { validateCommandId, isValidRowId } from '../src/commandid.js';
 
 test('a positive integer passes through unchanged', () => {
   assert.deepEqual(validateCommandId(1), { ok: true, value: 1 });
@@ -38,5 +38,32 @@ test('non-numeric strings, negative numbers, and non-integers are rejected', () 
   for (const bad of ['abc', -1, -5, 1.5, Infinity]) {
     const result = validateCommandId(bad);
     assert.equal(result.ok, false, `expected ${JSON.stringify(bad)} to be rejected`);
+  }
+});
+
+/**
+ * isValidRowId() is the same bindable-rowid shape check as validateCommandId,
+ * but for routes/templates.js's POST /templates/:id/apply, which loops over
+ * a `deviceIds` array and binds each element straight into
+ * `db.prepare('...WHERE id = ?').get(id)` — every element is required (no
+ * "falsy = not provided" carve-out makes sense inside a list), and a
+ * malformed element used to crash the whole batch with a raw 500 instead of
+ * landing in that same request's `skipped` list like any other invalid id.
+ */
+test('isValidRowId accepts a positive integer or a numeric string of one', () => {
+  assert.equal(isValidRowId(1), true);
+  assert.equal(isValidRowId(42), true);
+  assert.equal(isValidRowId('7'), true);
+});
+
+test('isValidRowId rejects objects/arrays/booleans instead of letting them reach the SQL bind', () => {
+  for (const bad of [{}, { a: 1 }, [], [1, 2], true, false]) {
+    assert.equal(isValidRowId(bad), false, `expected ${JSON.stringify(bad)} to be rejected`);
+  }
+});
+
+test('isValidRowId rejects zero, negative numbers, non-integers, NaN, and non-numeric strings', () => {
+  for (const bad of [0, -1, -5, 1.5, NaN, Infinity, 'abc', '', null, undefined]) {
+    assert.equal(isValidRowId(bad), false, `expected ${JSON.stringify(bad)} to be rejected`);
   }
 });

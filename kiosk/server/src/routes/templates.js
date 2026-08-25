@@ -4,6 +4,7 @@ import { requireAuth } from '../auth.js';
 import { applyDevicePolicy } from '../policy.js';
 import { buildTemplateFields, policyPatchFromTemplate, templateColumns } from '../templatepolicy.js';
 import { validateName } from '../names.js';
+import { isValidRowId } from '../commandid.js';
 
 // KIOSK_BUILD.md §8 "קבוצות/תבניות: להחיל מדיניות על קבוצת מכשירים בבת אחת" —
 // a saved policy an owner applies to many of their own devices at once,
@@ -101,6 +102,19 @@ router.post('/templates/:id/apply', requireAuth, (req, res) => {
   const applied = [];
   const skipped = [];
   for (const id of deviceIds) {
+    // Each element used to reach `db.prepare('...WHERE id = ?').get(id)`
+    // unchecked — a real numeric id was always fine, but an object/array
+    // element crashes better-sqlite3's bind with a raw, unhandled 500
+    // (RangeError "Too few/many parameter values were provided" for an
+    // object/array, TypeError "SQLite3 can only bind numbers, strings,
+    // bigints, buffers, and null" for a boolean — reproduced live) instead
+    // of the clean per-id `skipped` outcome every other "not mine"/"does not
+    // exist" id in this same loop already gets. Folded into that same
+    // skipped bucket rather than 400ing the whole batch: a malformed id
+    // mixed into an otherwise-valid selection is exactly the "this one
+    // entry cannot be applied to" shape this loop already handles for a
+    // stale/foreign id, not a reason to lose every other device's update.
+    if (!isValidRowId(id)) { skipped.push(id); continue; }
     const device = db.prepare('SELECT * FROM devices WHERE id = ?').get(id);
     if (!device || device.owner_id !== req.user.id) { skipped.push(id); continue; }
     const result = applyDevicePolicy(device, patch, req.user.id, `החלת תבנית "${template.name}"`);
