@@ -59,6 +59,9 @@ test('buildTemplateFields treats idleReturnSeconds null/"" as "not part of the t
   assert.equal(buildTemplateFields({ idleReturnSeconds: '' }).fields.idle_return_seconds, null);
   assert.equal(buildTemplateFields({ idleReturnSeconds: 30 }).fields.idle_return_seconds, 30);
   assert.equal(buildTemplateFields({ idleReturnSeconds: -5 }).fields.idle_return_seconds, 0);
+  // Not stored uncapped: an absurd value would otherwise push straight to every
+  // device the template is later applied to, defeating the auto-return safety net.
+  assert.equal(buildTemplateFields({ idleReturnSeconds: 999999999 }).fields.idle_return_seconds, 86400);
 });
 
 test('buildTemplateFields exitCode "" is a real clear value, distinct from unset', () => {
