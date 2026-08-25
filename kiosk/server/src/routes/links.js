@@ -2,6 +2,7 @@ import express from 'express';
 import { db, logEvent } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { hostsForUrl, normalizeHostCsv, normalizeHomeUrl } from '../hosts.js';
+import { validateName } from '../names.js';
 
 // The per-customer link library: named event/venue links to lock devices onto.
 const router = express.Router();
@@ -20,7 +21,10 @@ router.get('/links', requireAuth, (req, res) => {
 // device to pick up later. normalizeHomeUrl (hosts.js) requires http(s).
 router.post('/links', requireAuth, (req, res) => {
   const { name, url, allowedHost } = req.body || {};
-  if (!name || !url) return res.status(400).json({ error: 'נדרשים שם וכתובת קישור' });
+  const nameCheck = validateName(name, 'שם הקישור');
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  const cleanName = nameCheck.value || '';
+  if (!cleanName || !url) return res.status(400).json({ error: 'נדרשים שם וכתובת קישור' });
   const checked = normalizeHomeUrl(url);
   if (!checked.ok || !checked.value) {
     return res.status(400).json({
@@ -30,7 +34,7 @@ router.post('/links', requireAuth, (req, res) => {
   const cleanUrl = checked.value;
   const hosts = hostsForUrl(cleanUrl, allowedHost);
   const info = db.prepare('INSERT INTO links (owner_id, name, url, allowed_host) VALUES (?, ?, ?, ?)')
-    .run(req.user.id, String(name).trim(), cleanUrl, hosts);
+    .run(req.user.id, cleanName, cleanUrl, hosts);
   logEvent(null, req.user.id, 'link_created', name);
   res.json({ link: db.prepare('SELECT id, name, url, allowed_host, created_at FROM links WHERE id = ?').get(info.lastInsertRowid) });
 });
@@ -39,6 +43,9 @@ router.patch('/links/:id', requireAuth, (req, res) => {
   const link = db.prepare('SELECT * FROM links WHERE id = ?').get(req.params.id);
   if (!link || link.owner_id !== req.user.id) return res.sendStatus(404);
   const { name, url, allowedHost } = req.body || {};
+  const nameCheck = validateName(name, 'שם הקישור');
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  const newName = nameCheck.value;
   // PATCH used to store `url` completely unvalidated — the one door onto the
   // library that checked nothing at all, not even the accidental host-only
   // guard POST /links had.
@@ -54,7 +61,7 @@ router.patch('/links/:id', requireAuth, (req, res) => {
   }
   const hosts = allowedHost != null || url ? hostsForUrl(newUrl, allowedHost ?? link.allowed_host) : link.allowed_host;
   db.prepare('UPDATE links SET name = COALESCE(?, name), url = ?, allowed_host = ? WHERE id = ?')
-    .run(name ?? null, newUrl, hosts, link.id);
+    .run(newName ?? null, newUrl, hosts, link.id);
   res.json({ link: db.prepare('SELECT id, name, url, allowed_host, created_at FROM links WHERE id = ?').get(link.id) });
 });
 

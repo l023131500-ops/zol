@@ -22,6 +22,12 @@ test('buildTemplateFields requires a non-blank name when name is touched', () =>
   assert.equal(buildTemplateFields({ name: ' Evening ' }).fields.name, 'Evening');
 });
 
+test('buildTemplateFields caps name at 120 characters', () => {
+  const ok = 'א'.repeat(120);
+  assert.equal(buildTemplateFields({ name: ok }).fields.name, ok);
+  assert.match(buildTemplateFields({ name: 'א'.repeat(121) }).error, /ארוך מדי/);
+});
+
 test('buildTemplateFields normalizes an allow-list the same way a device edit does', () => {
   const { fields } = buildTemplateFields({ allowedHost: 'Example.com, pay.example.com' });
   assert.equal(fields.allowed_host, 'example.com,pay.example.com');

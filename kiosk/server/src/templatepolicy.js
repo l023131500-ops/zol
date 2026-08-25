@@ -26,6 +26,7 @@ import { clampIdleReturnSeconds } from './idletimeout.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
+import { validateName } from './names.js';
 
 /**
  * Validate + normalize whatever subset of template fields is present in
@@ -38,9 +39,10 @@ export function buildTemplateFields(body) {
   const fields = {};
 
   if (b.name !== undefined) {
-    const name = String(b.name ?? '').trim();
-    if (!name) return { error: 'נדרש שם לתבנית' };
-    fields.name = name;
+    const nameCheck = validateName(b.name, 'שם התבנית');
+    if (!nameCheck.ok) return { error: nameCheck.error };
+    if (!nameCheck.value) return { error: 'נדרש שם לתבנית' };
+    fields.name = nameCheck.value;
   }
 
   if (b.homeUrl !== undefined) {

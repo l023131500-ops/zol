@@ -6,6 +6,7 @@ import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { hostAllowed, hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
 import { clampIdleReturnSeconds } from '../idletimeout.js';
+import { validateName } from '../names.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -152,6 +153,10 @@ router.post('/enrollments', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'אין מכסה פנויה. מחק מכשיר קיים או פנה למנהל להגדלת המכסה.' });
   }
   let { name, homeUrl, allowedHost, idleReturnSeconds, linkId } = req.body || {};
+
+  const nameCheck = validateName(name, 'שם המכשיר');
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  name = nameCheck.value;
 
   // Pick the locking link from the library, or accept a manual URL.
   if (linkId) {

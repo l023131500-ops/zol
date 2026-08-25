@@ -17,6 +17,7 @@ import { clampIdleReturnSeconds } from './idletimeout.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
+import { validateName } from './names.js';
 import { SNAPSHOT_COLUMNS, MAX_SNAPSHOTS_PER_DEVICE, snapshotFieldsFromDevice, policyFieldsPresent } from './snapshots.js';
 
 /**
@@ -78,6 +79,13 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
         scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
         signageEnabled, signageUrls, signageIntervalSeconds,
         maintenanceEnabled, maintenanceMessage } = body || {};
+
+  // name is validated up front too, for the same reason exitCode is below:
+  // COALESCE(?, name) treats '' as "clear" and undefined as "no change", so a
+  // too-long value must be rejected here rather than silently stored.
+  const nameCheck = validateName(name, 'שם המכשיר');
+  if (!nameCheck.ok) return { ok: false, status: 400, error: nameCheck.error };
+  name = nameCheck.value;
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
