@@ -19,7 +19,7 @@
 // wiring lives in routes/templates.js; the device-write half shared with
 // routes/devices.js's PATCH lives in policy.js.
 
-import { normalizeHostCsv, parseHosts } from './hosts.js';
+import { normalizeHostCsv, parseHosts, normalizeHomeUrl } from './hosts.js';
 import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
@@ -43,9 +43,24 @@ export function buildTemplateFields(body) {
   }
 
   if (b.homeUrl !== undefined) {
-    const homeUrl = String(b.homeUrl ?? '').trim();
-    if (homeUrl) { try { new URL(homeUrl); } catch { return { error: 'כתובת אתר לא תקינה' }; } }
-    fields.home_url = homeUrl || null;
+    // Same normalizeHomeUrl() gate every other door onto a device's home_url
+    // (PATCH /devices/:id, POST /enrollments, set_url, POST/PATCH /links)
+    // already uses — this door only ever checked `new URL()` doesn't throw,
+    // which a bare host-check-shaped `javascript://x` passes straight
+    // through (see hosts.js's own header comment on that exact bypass).
+    // policy.js's applyDevicePolicy re-validates before any device write, so
+    // a bad template could never actually reach a device, but it was stored
+    // silently here with no error, then failed silently (into `skipped`,
+    // with no reason surfaced) the moment an owner applied it.
+    const checked = normalizeHomeUrl(b.homeUrl);
+    if (!checked.ok) {
+      return {
+        error: checked.reason === 'scheme'
+          ? 'האתר הראשי חייב להתחיל ב-http:// או ב-https://'
+          : 'כתובת אתר לא תקינה',
+      };
+    }
+    fields.home_url = checked.value || null;
   }
 
   if (b.allowedHost !== undefined) {
