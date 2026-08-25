@@ -13,6 +13,7 @@ import { issueCommand } from './commands.js';
 import { hostsForUrl, normalizeHostCsv, parseHosts, normalizeHomeUrl } from './hosts.js';
 import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
+import { clampIdleReturnSeconds } from './idletimeout.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
@@ -218,7 +219,7 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
      maintenance_enabled = COALESCE(?, maintenance_enabled),
      maintenance_message = CASE WHEN ? = 1 THEN ? ELSE maintenance_message END WHERE id = ?`)
     .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
-         idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
+         idleReturnSeconds != null ? clampIdleReturnSeconds(idleReturnSeconds) : null,
          exitCodeValue,
          displayZoomPercent != null ? clampZoomPercent(displayZoomPercent) : null,
          scheduleValues ? scheduleValues.enabled : null,
