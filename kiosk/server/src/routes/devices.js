@@ -5,6 +5,7 @@ import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { hostAllowed, hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
+import { validateName } from '../names.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -151,6 +152,16 @@ router.post('/enrollments', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'אין מכסה פנויה. מחק מכשיר קיים או פנה למנהל להגדלת המכסה.' });
   }
   let { name, homeUrl, allowedHost, idleReturnSeconds, linkId } = req.body || {};
+
+  // `name` used to go straight from req.body into `name || null` at the
+  // bottom of this route with no type check — an object/array/boolean value
+  // reaches better-sqlite3's bind and crashes with a raw 500 instead of a
+  // clean 400 (see names.js's header comment; reproduced live). Validated
+  // before the `linkId` fallback below so a malformed `name` is rejected
+  // even when a link also supplies its own name.
+  const nameCheck = validateName(name, 'שם ההרשמה');
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  name = nameCheck.value;
 
   // Pick the locking link from the library, or accept a manual URL.
   if (linkId) {
