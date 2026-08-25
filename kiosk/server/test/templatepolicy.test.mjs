@@ -44,6 +44,11 @@ test('buildTemplateFields treats idleReturnSeconds null/"" as "not part of the t
   assert.equal(buildTemplateFields({ idleReturnSeconds: -5 }).fields.idle_return_seconds, 0);
 });
 
+test('buildTemplateFields caps an absurd idleReturnSeconds instead of applying it unbounded fleet-wide', () => {
+  assert.equal(buildTemplateFields({ idleReturnSeconds: 999999999 }).fields.idle_return_seconds, 86400);
+  assert.equal(buildTemplateFields({ idleReturnSeconds: 'abc' }).fields.idle_return_seconds, 0);
+});
+
 test('buildTemplateFields exitCode "" is a real clear value, distinct from unset', () => {
   const cleared = buildTemplateFields({ exitCode: '' });
   assert.equal(cleared.error, undefined);

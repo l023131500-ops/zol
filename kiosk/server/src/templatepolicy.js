@@ -22,6 +22,7 @@
 import { normalizeHostCsv, parseHosts, normalizeHomeUrl } from './hosts.js';
 import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
+import { clampIdleReturnSeconds } from './idletimeout.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
@@ -73,7 +74,7 @@ export function buildTemplateFields(body) {
 
   if (b.idleReturnSeconds !== undefined) {
     fields.idle_return_seconds = b.idleReturnSeconds === null || b.idleReturnSeconds === ''
-      ? null : Math.max(0, Number(b.idleReturnSeconds) || 0);
+      ? null : clampIdleReturnSeconds(b.idleReturnSeconds);
   }
 
   if (b.exitCode !== undefined) {
