@@ -27,7 +27,7 @@ interface CommandHandler {
     fun onLock()
     fun onUnlock(minutes: Int)
     fun onMessage(text: String)
-    fun onConfigUpdated(homeUrl: String, allowedHost: String, idleReturnSeconds: Int, displayZoomPercent: Int)
+    fun onConfigUpdated(homeUrl: String, allowedHost: String, idleReturnSeconds: Int, displayZoomPercent: Int, displayOrientation: String)
     fun onScreenshot(commandId: Long)
 }
 
@@ -149,6 +149,12 @@ class AgentClient(
                 val zoom = cfg.optInt("displayZoomPercent", Prefs.get(ctx, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100)
                 val zoomChanged = zoom.toString() != Prefs.get(ctx, Prefs.DISPLAY_ZOOM)
                 if (zoomChanged) Prefs.set(ctx, Prefs.DISPLAY_ZOOM, zoom.toString())
+                // KIOSK_BUILD.md §5 "בחירת אוריינטציה": same "must land on its own"
+                // shape as zoom above — an owner locking a device to portrait does
+                // not necessarily touch home_url either.
+                val orientation = cfg.optString("displayOrientation", Prefs.get(ctx, Prefs.DISPLAY_ORIENTATION).ifEmpty { "landscape" })
+                val orientationChanged = orientation != Prefs.get(ctx, Prefs.DISPLAY_ORIENTATION).ifEmpty { "landscape" }
+                if (orientationChanged) Prefs.set(ctx, Prefs.DISPLAY_ORIENTATION, orientation)
                 // KIOSK_BUILD.md §9 "מצב תצוגה": same "must land on its own" shape
                 // as adminCode/approvedClients above — an owner toggling signage
                 // does not necessarily touch home_url, so it must not wait for an
@@ -179,15 +185,16 @@ class AgentClient(
                     val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
                         host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
                         idle.toString() != Prefs.get(ctx, Prefs.IDLE_RETURN) ||
-                        zoomChanged || maintenanceChanged
+                        zoomChanged || orientationChanged || maintenanceChanged
                     Prefs.set(ctx, Prefs.HOME_URL, home)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
-                    if (changed) ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
-                } else if (zoomChanged || maintenanceChanged) {
+                    if (changed) ui.post { handler.onConfigUpdated(home, host, idle, zoom, orientation) }
+                } else if (zoomChanged || orientationChanged || maintenanceChanged) {
                     // No home-link change to carry the update, but the zoom/
-                    // maintenance state still has to reach the on-screen WebView.
-                    ui.post { handler.onConfigUpdated(Prefs.get(ctx, Prefs.HOME_URL), Prefs.get(ctx, Prefs.ALLOWED_HOST), idle, zoom) }
+                    // orientation/maintenance state still has to reach the on-screen
+                    // WebView/Activity.
+                    ui.post { handler.onConfigUpdated(Prefs.get(ctx, Prefs.HOME_URL), Prefs.get(ctx, Prefs.ALLOWED_HOST), idle, zoom, orientation) }
                 }
             }
             val cmds = json.optJSONArray("commands") ?: return
@@ -231,6 +238,8 @@ class AgentClient(
                     val adminCode = payload.optString("adminCode", Prefs.get(ctx, Prefs.ADMIN_CODE))
                     val zoom = payload.optInt("displayZoomPercent",
                         Prefs.get(ctx, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100)
+                    val orientation = payload.optString("displayOrientation",
+                        Prefs.get(ctx, Prefs.DISPLAY_ORIENTATION).ifEmpty { "landscape" })
                     val approvedClientsJson = payload.optJSONArray("approvedClients")?.toString()
                         ?: Prefs.get(ctx, Prefs.APPROVED_CLIENTS, "[]")
                     // KIOSK_BUILD.md §9 "מצב תצוגה": persisted the same silent way
@@ -257,13 +266,14 @@ class AgentClient(
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
                     Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
                     Prefs.set(ctx, Prefs.DISPLAY_ZOOM, zoom.toString())
+                    Prefs.set(ctx, Prefs.DISPLAY_ORIENTATION, orientation)
                     Prefs.set(ctx, Prefs.APPROVED_CLIENTS, approvedClientsJson)
                     Prefs.set(ctx, Prefs.SIGNAGE_ENABLED, signageEnabled)
                     Prefs.set(ctx, Prefs.SIGNAGE_URLS, signageUrls)
                     Prefs.set(ctx, Prefs.SIGNAGE_INTERVAL, signageInterval.toString())
                     Prefs.set(ctx, Prefs.MAINTENANCE_ENABLED, maintenanceEnabled)
                     Prefs.set(ctx, Prefs.MAINTENANCE_MESSAGE, maintenanceMessage)
-                    ui.post { handler.onConfigUpdated(home, host, idle, zoom) }
+                    ui.post { handler.onConfigUpdated(home, host, idle, zoom, orientation) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }
                 else -> { ok = false; result = "unknown command" }

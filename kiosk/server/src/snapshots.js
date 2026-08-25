@@ -15,6 +15,7 @@ import { policyPatchFromTemplate } from './templatepolicy.js';
 
 export const SNAPSHOT_COLUMNS = [
   'home_url', 'allowed_host', 'idle_return_seconds', 'exit_code', 'display_zoom_percent',
+  'display_orientation',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
   'maintenance_enabled', 'maintenance_message', 'payment_mode',
@@ -37,6 +38,7 @@ export function snapshotFieldsFromDevice(device) {
 // cannot silently drift from "what applyDevicePolicy actually accepts".
 const POLICY_BODY_KEYS = [
   'homeUrl', 'allowedHost', 'linkId', 'idleReturnSeconds', 'exitCode', 'displayZoomPercent',
+  'displayOrientation',
   'scheduleEnabled', 'scheduleOpenTime', 'scheduleCloseTime',
   'signageEnabled', 'signageUrls', 'signageIntervalSeconds',
   'maintenanceEnabled', 'maintenanceMessage', 'paymentMode',

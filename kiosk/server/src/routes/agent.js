@@ -101,6 +101,7 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       // here too, not only on the heartbeat/update_config paths.
       adminCode: device.exit_code || '',
       displayZoomPercent: device.display_zoom_percent,
+      displayOrientation: device.display_orientation || 'landscape',
       // §2★ה requires the on-device selection screen to work fully offline,
       // so the approved-customers list (empty at first enrollment, filled in
       // once the owner approves some in the console) travels here too rather
@@ -147,6 +148,7 @@ router.post('/heartbeat', (req, res) => {
       homeUrl: fresh.home_url, allowedHost: fresh.allowed_host,
       name: fresh.name, idleReturnSeconds: fresh.idle_return_seconds,
       adminCode: fresh.exit_code || '', displayZoomPercent: fresh.display_zoom_percent,
+      displayOrientation: fresh.display_orientation || 'landscape',
       approvedClients: approvedClientsForDevice(fresh.id),
       signageEnabled: !!fresh.signage_enabled, signageUrls: fresh.signage_urls || '',
       signageIntervalSeconds: fresh.signage_interval_seconds,

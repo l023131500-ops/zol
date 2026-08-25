@@ -280,6 +280,19 @@ db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_access_code ON devices(ac
 ensureColumn('devices', 'payment_mode', "payment_mode TEXT NOT NULL DEFAULT 'none'");
 ensureColumn('templates', 'payment_mode', 'payment_mode TEXT');
 ensureColumn('policy_snapshots', 'payment_mode', 'payment_mode TEXT');
+// KIOSK_BUILD.md §5 "בחירת אוריינטציה: אורך / רוחב — נכפה על המכשיר": until
+// now every device was locked to landscape only, hardcoded in
+// AndroidManifest.xml's static android:screenOrientation on KioskActivity —
+// there was no way to force a specific device to portrait, or leave rotation
+// unforced, from the console. 'landscape' on every existing row is therefore
+// the honest default: it matches exactly what every device already does
+// today, so this migration changes no device's actual behavior on its own
+// (src/orientation.js). Rides commands.js's update_config payload like
+// display_zoom_percent above it — unlike payment_mode/access_code, it does
+// change what the Android agent enforces (KioskActivity.applyOrientation()).
+ensureColumn('devices', 'display_orientation', "display_orientation TEXT NOT NULL DEFAULT 'landscape'");
+ensureColumn('templates', 'display_orientation', 'display_orientation TEXT');
+ensureColumn('policy_snapshots', 'display_orientation', 'display_orientation TEXT');
 
 /** A fresh access code guaranteed not to collide with any row already in the table. */
 export function nextAccessCode() {

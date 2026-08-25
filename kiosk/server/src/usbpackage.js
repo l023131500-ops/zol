@@ -80,7 +80,8 @@ export function sanitizeApkFilename(raw) {
  * on which fields get applied.
  */
 export function buildOfflineEnrollPayload({
-  deviceToken, name, homeUrl, allowedHost, idleReturnSeconds, adminCode, displayZoomPercent, approvedClients,
+  deviceToken, name, homeUrl, allowedHost, idleReturnSeconds, adminCode, displayZoomPercent,
+  displayOrientation, approvedClients,
 } = {}) {
   if (!deviceToken) throw new Error('deviceToken is required');
   if (!homeUrl) throw new Error('homeUrl is required');
@@ -93,6 +94,7 @@ export function buildOfflineEnrollPayload({
       idleReturnSeconds: idleReturnSeconds ?? 0,
       adminCode: adminCode || '',
       displayZoomPercent: displayZoomPercent ?? 100,
+      displayOrientation: displayOrientation || 'landscape',
       approvedClients: approvedClients ?? [],
     },
   };
@@ -112,7 +114,7 @@ export function buildOfflineEnrollPayload({
  */
 export function buildUsbOfflineScript({
   serial, deviceName, homeUrl, allowedHost, deviceToken, idleReturnSeconds,
-  adminCode, displayZoomPercent, approvedClients, apkFilename,
+  adminCode, displayZoomPercent, displayOrientation, approvedClients, apkFilename,
 } = {}) {
   const cleanSerial = sanitizeSerial(serial);
   if (!cleanSerial) throw new Error('serial is required');
@@ -122,7 +124,7 @@ export function buildUsbOfflineScript({
 
   const payload = buildOfflineEnrollPayload({
     deviceToken, name: deviceName, homeUrl, allowedHost, idleReturnSeconds,
-    adminCode, displayZoomPercent, approvedClients,
+    adminCode, displayZoomPercent, displayOrientation, approvedClients,
   });
   const configJson = JSON.stringify(payload, null, 2);
   // Comment-safe (CR/LF stripped so it cannot break out of a `#` line) but

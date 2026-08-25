@@ -151,6 +151,7 @@ class EnrollActivity : AppCompatActivity() {
         Prefs.set(this, Prefs.LAST_URL, dev.optString("homeUrl"))
         Prefs.set(this, Prefs.ADMIN_CODE, dev.optString("adminCode"))
         Prefs.set(this, Prefs.DISPLAY_ZOOM, dev.optInt("displayZoomPercent", 100).toString())
+        Prefs.set(this, Prefs.DISPLAY_ORIENTATION, dev.optString("displayOrientation", "landscape"))
         Prefs.set(this, Prefs.APPROVED_CLIENTS, dev.optJSONArray("approvedClients")?.toString() ?: "[]")
     }
 
