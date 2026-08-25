@@ -3,6 +3,7 @@ import { db, logEvent } from '../db.js';
 import { requireAdmin, hashPassword } from '../auth.js';
 import { disconnectConsole } from '../hub.js';
 import { validateFullName } from '../users.js';
+import { validateUsername, validatePassword } from '../credentials.js';
 
 // Super-admin only. Manage customer accounts and see the whole fleet.
 const router = express.Router();
@@ -23,16 +24,18 @@ router.get('/users', requireAdmin, (req, res) => {
 
 router.post('/users', requireAdmin, (req, res) => {
   const { username, password, fullName, deviceLimit, role } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: 'נדרשים שם משתמש וסיסמה' });
-  if (password.length < 8) return res.status(400).json({ error: 'סיסמה חייבת להיות באורך 8 תווים לפחות' });
+  const userCheck = validateUsername(username);
+  if (!userCheck.ok) return res.status(400).json({ error: userCheck.error });
+  const passCheck = validatePassword(password);
+  if (!passCheck.ok) return res.status(400).json({ error: passCheck.error });
   const nameCheck = validateFullName(fullName);
   if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
-  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username))
+  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(userCheck.value))
     return res.status(409).json({ error: 'שם המשתמש כבר קיים' });
   const info = db.prepare('INSERT INTO users (username, password_hash, full_name, role, device_limit) VALUES (?, ?, ?, ?, ?)')
-    .run(String(username).trim(), hashPassword(password), nameCheck.value ?? null,
+    .run(userCheck.value, hashPassword(passCheck.value), nameCheck.value ?? null,
          role === 'admin' ? 'admin' : 'user', Math.max(1, Number(deviceLimit) || 1));
-  logEvent(null, req.user.id, 'user_created', username);
+  logEvent(null, req.user.id, 'user_created', userCheck.value);
   res.json({ user: db.prepare('SELECT id, username, full_name, role, device_limit, active FROM users WHERE id = ?').get(info.lastInsertRowid) });
 });
 
@@ -59,8 +62,9 @@ router.post('/users/:id/reset-password', requireAdmin, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.sendStatus(404);
   const { password } = req.body || {};
-  if (!password || password.length < 8) return res.status(400).json({ error: 'סיסמה חייבת להיות 8 תווים לפחות' });
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), user.id);
+  const passCheck = validatePassword(password);
+  if (!passCheck.ok) return res.status(400).json({ error: 'סיסמה חייבת להיות 8 תווים לפחות' });
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(passCheck.value), user.id);
   logEvent(null, req.user.id, 'password_reset', user.username);
   res.json({ ok: true });
 });

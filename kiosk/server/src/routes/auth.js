@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { db, logEvent } from '../db.js';
 import { signToken, verifyPassword, hashPassword, requireAuth } from '../auth.js';
 import { config } from '../config.js';
+import { validateUsername, validatePassword, requireNonEmptyString } from '../credentials.js';
 
 const router = express.Router();
 
@@ -16,15 +17,17 @@ const loginLimiter = rateLimit({
 
 router.post('/login', loginLimiter, (req, res) => {
   const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: 'נדרשים שם משתמש וסיסמה' });
+  const nameCheck = validateUsername(username);
+  const passCheck = requireNonEmptyString(password, 'סיסמה');
+  if (!nameCheck.ok || !passCheck.ok) return res.status(400).json({ error: 'נדרשים שם משתמש וסיסמה' });
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(String(username).trim());
-  if (!user || !user.active || !verifyPassword(password, user.password_hash)) {
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(nameCheck.value);
+  if (!user || !user.active || !verifyPassword(passCheck.value, user.password_hash)) {
     return res.status(401).json({ error: 'שם משתמש או סיסמה שגויים' });
   }
 
   const token = signToken(user);
-  logEvent(null, user.id, 'login', username);
+  logEvent(null, user.id, 'login', nameCheck.value);
   res.cookie('kf_token', token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -55,11 +58,12 @@ router.get('/me', requireAuth, (req, res) => {
 
 router.post('/change-password', requireAuth, (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
-  if (!newPassword || newPassword.length < 8)
-    return res.status(400).json({ error: 'סיסמה חדשה חייבת להיות באורך 8 תווים לפחות' });
-  if (!verifyPassword(currentPassword || '', req.user.password_hash))
+  const newCheck = validatePassword(newPassword, { label: 'סיסמה חדשה' });
+  if (!newCheck.ok) return res.status(400).json({ error: newCheck.error });
+  const curCheck = requireNonEmptyString(currentPassword, 'סיסמה נוכחית');
+  if (!curCheck.ok || !verifyPassword(curCheck.value, req.user.password_hash))
     return res.status(403).json({ error: 'הסיסמה הנוכחית שגויה' });
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(newPassword), req.user.id);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(newCheck.value), req.user.id);
   logEvent(null, req.user.id, 'password_change', null);
   res.json({ ok: true });
 });
