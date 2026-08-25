@@ -745,9 +745,10 @@ async function loadEnrollments() {
   if (!open.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין קודים פתוחים.</p>'; return; }
   box.innerHTML = '<table><tr><th>קוד</th><th>אתר</th><th>שם</th><th></th></tr>' +
     open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td>
-      <td class="e-actions"><button class="btn btn-sm" data-usb="${e.id}">📦 USB אופליין</button> <button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
+      <td class="e-actions"><button class="btn btn-sm" data-usb="${e.id}">📦 USB אופליין</button> <button class="btn btn-sm" data-qr="${e.id}">📱 QR (מסלול A)</button> <button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/enrollments/' + b.dataset.del, { method: 'DELETE' }); loadEnrollments(); });
   box.querySelectorAll('[data-usb]').forEach((b) => b.onclick = () => openUsbPackageForm(b));
+  box.querySelectorAll('[data-qr]').forEach((b) => b.onclick = () => openQrPackageForm(b));
 }
 
 // KIOSK_BUILD.md §3 Route D: unlike every other per-row action here, this
@@ -780,6 +781,47 @@ function openUsbPackageForm(btn) {
   };
   go.onclick = submit;
   input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') submit(); });
+}
+
+// KIOSK_BUILD.md §3 Route A + §10-A: unlike USB above, this one does not
+// consume the enrollment code or provision a device row — the code still
+// gets redeemed for real over the network once the scanned device applies
+// it, so re-opening this form after a failed scan just regenerates the same
+// payload rather than needing a fresh code. Wi-Fi fields are optional and
+// collapsed by default: most venues' devices already join Wi-Fi during the
+// stock Android setup wizard, before the QR is ever scanned.
+function openQrPackageForm(btn) {
+  const enrollmentId = btn.dataset.qr;
+  const td = btn.closest('td');
+  td.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <input class="qr-wifi-ssid" placeholder="Wi-Fi SSID (אופציונלי)" style="width:150px" />
+      <input class="qr-wifi-pass" placeholder="סיסמת Wi-Fi" type="password" style="width:130px" />
+      <button class="btn btn-primary btn-sm" data-qr-go>צור QR</button>
+      <button class="btn btn-sm" data-qr-cancel>ביטול</button>
+    </div>
+    <div style="color:var(--muted);font-size:11px;margin-top:4px">מייצר את חבילת ה-JSON למכשיר GMS חדש/מאופס: איפוס יצרן ← הקשה 6× על מסך הברוכים-הבאים ← סריקת QR שנוצר מהטקסט הזה במחולל QR מקומי/אופליין בלבד.</div>
+    <div class="qr-result" style="margin-top:8px"></div>`;
+  td.querySelector('[data-qr-cancel]').onclick = () => loadEnrollments();
+  const go = td.querySelector('[data-qr-go]');
+  const result = td.querySelector('.qr-result');
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      const body = {
+        wifiSsid: td.querySelector('.qr-wifi-ssid').value.trim(),
+        wifiPassword: td.querySelector('.qr-wifi-pass').value,
+      };
+      const res = await api(`/enrollments/${enrollmentId}/qr-package`, { method: 'POST', body: JSON.stringify(body) });
+      result.innerHTML = `<div class="alert alert-warn" style="margin-bottom:6px">${esc(res.warning)}</div>
+        <textarea class="qr-json" readonly dir="ltr" style="width:100%;min-height:140px;font-family:monospace;font-size:11px">${esc(res.payloadJson)}</textarea>
+        <button class="btn btn-sm" data-qr-copy style="margin-top:4px">העתק JSON</button>`;
+      result.querySelector('[data-qr-copy]').onclick = async () => {
+        try { await navigator.clipboard.writeText(res.payloadJson); toast('הועתק'); }
+        catch { result.querySelector('.qr-json').select(); toast('סמנו והעתיקו ידנית (Ctrl+C)', false); }
+      };
+    } catch (e) { toast(e.message, false); }
+    finally { go.disabled = false; }
+  };
 }
 
 // ── LINK LIBRARY ────────────────────────────────────────────────

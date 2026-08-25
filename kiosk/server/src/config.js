@@ -67,6 +67,16 @@ export const config = {
   crashLoopThreshold: Number(process.env.CRASH_LOOP_THRESHOLD || 3),
   seedAdminUser: process.env.SEED_ADMIN_USER || 'admin',
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || 'admin1234',
+  // KIOSK_BUILD.md §3 Route A (QR provisioning): the agent APK's own hosted
+  // download URL and its signing-certificate checksum. Optional — Route A's
+  // QR endpoint (qrprovision.js) refuses with a clear message instead of
+  // generating a broken payload when either is unset, the same "documented
+  // missing token, not a crash" shape CONNECTIONS.md already records for
+  // igud-transcribe's OPENAI_API_KEY. Not `required()`: every other route
+  // (B/C/D) works with neither set, so this deployment must keep booting
+  // without them.
+  kioskAgentApkUrl: (process.env.KIOSK_AGENT_APK_URL || '').trim(),
+  kioskAgentApkSignatureChecksum: (process.env.KIOSK_AGENT_APK_SIGNATURE_CHECKSUM || '').trim(),
   isProd: process.env.NODE_ENV === 'production',
   root,
   publicDir: path.resolve(root, 'public'),
