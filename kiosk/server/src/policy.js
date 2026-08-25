@@ -98,7 +98,15 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
   // already saved earlier cannot skip the check.
   let scheduleValues = null;
   if (scheduleEnabled !== undefined || scheduleOpenTime !== undefined || scheduleCloseTime !== undefined) {
-    const enabled = !!scheduleEnabled;
+    // Falls back to the device's own current flag when the caller only sent
+    // scheduleOpenTime/scheduleCloseTime — matching how openTime/closeTime
+    // themselves already fall back to the device's existing value below.
+    // Without this, editing just the hours (without resending
+    // scheduleEnabled) silently turned the schedule off: `enabled` was built
+    // from the request body alone, and COALESCE has no "leave alone" value
+    // for an INTEGER column, so the write always landed 0/1, never "no
+    // change" for this one field.
+    const enabled = scheduleEnabled !== undefined ? !!scheduleEnabled : !!device.schedule_enabled;
     const openTime = scheduleOpenTime !== undefined ? scheduleOpenTime : device.schedule_open_time;
     const closeTime = scheduleCloseTime !== undefined ? scheduleCloseTime : device.schedule_close_time;
     if (enabled) {
@@ -116,7 +124,10 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
   // earlier, still gets checked.
   let signageValues = null;
   if (signageEnabled !== undefined || signageUrls !== undefined || signageIntervalSeconds !== undefined) {
-    const enabled = !!signageEnabled;
+    // Same fallback as scheduleValues above: editing just the playlist or the
+    // interval (without resending signageEnabled) must not silently turn
+    // signage off.
+    const enabled = signageEnabled !== undefined ? !!signageEnabled : !!device.signage_enabled;
     const urls = signageUrls !== undefined ? signageUrls : device.signage_urls;
     const intervalSeconds = signageIntervalSeconds !== undefined ? signageIntervalSeconds : device.signage_interval_seconds;
     let urlsValue = urls || null;
@@ -143,7 +154,11 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
     const message = maintenanceMessage !== undefined ? maintenanceMessage : device.maintenance_message;
     const v = validateMaintenanceMessage(message);
     if (!v.ok) return { ok: false, status: 400, error: v.error };
-    maintenanceValues = { enabled: maintenanceEnabled ? 1 : 0, message: v.value };
+    // Same fallback as scheduleValues/signageValues above: editing just the
+    // message (without resending maintenanceEnabled) must not silently turn
+    // maintenance mode off.
+    const enabled = maintenanceEnabled !== undefined ? !!maintenanceEnabled : !!device.maintenance_enabled;
+    maintenanceValues = { enabled: enabled ? 1 : 0, message: v.value };
   }
 
   // Selecting a link from the library overrides the URL + host set. A link
