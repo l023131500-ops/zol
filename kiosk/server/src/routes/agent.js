@@ -132,9 +132,32 @@ router.post('/heartbeat', (req, res) => {
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   notifyConsolesOfDevice(fresh, {});
 
-  const pending = db.prepare("SELECT * FROM commands WHERE device_id = ? AND status IN ('pending','delivered') ORDER BY id").all(device.id);
+  // Includes 'delivered' as a stuck-command safety net (a WS push can be
+  // marked delivered without the device ever actually receiving/acking it —
+  // AgentClient.ack() treats okhttp's WebSocket.send() returning true as
+  // success, but that only means the frame was queued, not that it crossed a
+  // silently-dead connection; the HTTP fallback in ack() is only attempted
+  // when send() itself returns false, so a dead-but-undetected socket loses
+  // the ack with no retry). Gated on staleness (delivered_at older than one
+  // full heartbeat cycle) so this only re-fires truly stuck commands instead
+  // of racing every 60s heartbeat against the device's own near-instant
+  // execute-then-ack for a command that just landed seconds ago — without the
+  // gate, AgentClient.heartbeat() has no per-command dedup (it blindly
+  // executes every entry in `commands`), so a still-in-flight 'delivered' row
+  // would be re-executed on the device (screen toggle, reboot, message,
+  // reload...) every single heartbeat until the ack finally lands.
+  const pending = db.prepare(
+    `SELECT * FROM commands WHERE device_id = ?
+     AND (status = 'pending' OR (status = 'delivered' AND delivered_at <= datetime('now', '-2 minutes')))
+     ORDER BY id`
+  ).all(device.id);
   const commands = pending.map((c) => {
-    db.prepare("UPDATE commands SET status = 'delivered', delivered_at = COALESCE(delivered_at, datetime('now')) WHERE id = ?").run(c.id);
+    // Unconditional (not COALESCE-preserving the old timestamp): a retried
+    // 'delivered' row must push its staleness clock forward on every
+    // redelivery, or it would satisfy the `-2 minutes` gate above on every
+    // heartbeat forever after its first retry instead of backing off another
+    // full cycle each time.
+    db.prepare("UPDATE commands SET status = 'delivered', delivered_at = datetime('now') WHERE id = ?").run(c.id);
     return { id: c.id, type: c.type, payload: c.payload ? JSON.parse(c.payload) : null };
   });
 
