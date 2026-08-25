@@ -3,6 +3,7 @@ import { db, logEvent } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { normalizeClientCode, normalizeBrandColor, normalizeLogoUrl } from '../clients.js';
+import { validateName } from '../names.js';
 
 // The owner's own customer directory (KIOSK_BUILD.md §2★ד): "מזהה לקוח" +
 // a direct link + branded site per customer. Mirrors links.js's ownership
@@ -26,7 +27,10 @@ router.post('/clients', requireAuth, (req, res) => {
   const { code, name, url, allowedHost, logoUrl, brandColor } = req.body || {};
   const cleanCode = normalizeClientCode(code);
   if (!cleanCode) return res.status(400).json({ error: 'מזהה לקוח לא תקין — 2 עד 24 אותיות/ספרות' });
-  if (!name || !url) return res.status(400).json({ error: 'נדרשים שם וכתובת אתר' });
+  const nameCheck = validateName(name, 'שם הלקוח');
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  const cleanName = nameCheck.value || '';
+  if (!cleanName || !url) return res.status(400).json({ error: 'נדרשים שם וכתובת אתר' });
   // This is the "אתר תדמית" a device's WebView navigates to the moment
   // someone types this client's code in (routes/devices.js's GET
   // /devices/:id/clients hands `url` straight through) — the same
@@ -50,7 +54,7 @@ router.post('/clients', requireAuth, (req, res) => {
   const hosts = hostsForUrl(checkedUrl.value, allowedHost);
   const info = db.prepare(
     'INSERT INTO clients (owner_id, code, name, url, allowed_host, logo_url, brand_color) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.user.id, cleanCode, String(name).trim(), checkedUrl.value, hosts, cleanLogoUrl || null, cleanBrandColor || null);
+  ).run(req.user.id, cleanCode, cleanName, checkedUrl.value, hosts, cleanLogoUrl || null, cleanBrandColor || null);
   logEvent(null, req.user.id, 'client_created', cleanCode);
   res.json({ client: publicClient(db.prepare('SELECT * FROM clients WHERE id = ?').get(info.lastInsertRowid)) });
 });
@@ -59,6 +63,9 @@ router.patch('/clients/:id', requireAuth, (req, res) => {
   const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
   if (!client || client.owner_id !== req.user.id) return res.sendStatus(404);
   const { code, name, url, allowedHost, logoUrl, brandColor } = req.body || {};
+  const nameCheck = validateName(name, 'שם הלקוח');
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  const newName = nameCheck.value;
   let newCode = client.code;
   if (code !== undefined) {
     newCode = normalizeClientCode(code);
@@ -91,7 +98,7 @@ router.patch('/clients/:id', requireAuth, (req, res) => {
     newBrandColor = cleanBrandColor || null;
   }
   db.prepare('UPDATE clients SET code = ?, name = COALESCE(?, name), url = ?, allowed_host = ?, logo_url = ?, brand_color = ? WHERE id = ?')
-    .run(newCode, name ?? null, newUrl, hosts, newLogoUrl, newBrandColor, client.id);
+    .run(newCode, newName ?? null, newUrl, hosts, newLogoUrl, newBrandColor, client.id);
   res.json({ client: publicClient(db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id)) });
 });
 
