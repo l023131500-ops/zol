@@ -6,6 +6,7 @@ import { notifyConsolesOfDevice } from '../hub.js';
 import { normalizeClientCode } from '../clients.js';
 import { validateExitAttemptBody } from '../alerts.js';
 import { validateWatchdogReportBody } from '../watchdog.js';
+import { sanitizeBatteryLevel } from '../batterylevel.js';
 
 // Device-facing API. Auth is by device_token (issued at enrollment), NOT by JWT.
 const router = express.Router();
@@ -126,7 +127,7 @@ router.post('/heartbeat', (req, res) => {
   db.prepare(`UPDATE devices SET online = 1, last_seen = datetime('now'),
      status = COALESCE(?, status), battery = COALESCE(?, battery),
      app_version = COALESCE(?, app_version), ip = COALESCE(?, ip) WHERE id = ?`)
-    .run(b.status ?? null, b.battery ?? null, b.appVersion ?? null,
+    .run(b.status ?? null, sanitizeBatteryLevel(b.battery), b.appVersion ?? null,
          b.ip ?? req.ip ?? null, device.id);
 
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
