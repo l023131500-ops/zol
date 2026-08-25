@@ -6,15 +6,15 @@
  * database state that used to answer "no" while the boot log said the server
  * had started cleanly.
  *
- * Driven against node's own `node:sqlite` with the same users DDL as
- * `src/db.js` — `server/node_modules` is not installed in this checkout, so
- * better-sqlite3 and bcryptjs cannot be loaded (same reason as
- * approvals.test.mjs). The password functions are the injected pair, standing
- * in for bcrypt; `applySeedAdmin` never calls them itself.
+ * Driven against the same `better-sqlite3` driver as `src/db.js`, with the
+ * same users DDL, so the synchronous prepare/get/run shape `applySeedAdmin`
+ * relies on is exercised for real rather than against a stand-in. The
+ * password functions are the injected pair, standing in for bcrypt;
+ * `applySeedAdmin` never calls them itself.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
+import Database from 'better-sqlite3';
 import { applySeedAdmin } from '../src/seedadmin.js';
 
 const DDL = `
@@ -39,7 +39,7 @@ const verifyPassword = (plain, hash) => hash === `h:${plain}`;
 const SEED = { username: 'admin', password: 'More30Admin2026', hashPassword, verifyPassword };
 
 function freshDb() {
-  const db = new DatabaseSync(':memory:');
+  const db = new Database(':memory:');
   db.exec(DDL);
   return db;
 }
