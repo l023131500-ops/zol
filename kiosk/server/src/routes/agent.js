@@ -6,6 +6,7 @@ import { notifyConsolesOfDevice } from '../hub.js';
 import { normalizeClientCode } from '../clients.js';
 import { validateExitAttemptBody } from '../alerts.js';
 import { validateWatchdogReportBody } from '../watchdog.js';
+import { validateSerial, sanitizeDeviceInfo } from '../deviceinfo.js';
 
 // Device-facing API. Auth is by device_token (issued at enrollment), NOT by JWT.
 const router = express.Router();
@@ -43,8 +44,11 @@ const enrollLimiter = rateLimit({
  * plus its assigned home_url / allowed_host.
  */
 router.post('/enroll', enrollLimiter, (req, res) => {
-  const { code, serial } = req.body || {};
-  if (!code || !serial) return res.status(400).json({ error: 'code and serial are required' });
+  const { code, serial: rawSerial } = req.body || {};
+  if (!code || !rawSerial) return res.status(400).json({ error: 'code and serial are required' });
+  const serialCheck = validateSerial(rawSerial);
+  if (!serialCheck.ok) return res.status(400).json({ error: serialCheck.error });
+  const serial = serialCheck.value;
 
   const enr = db.prepare('SELECT * FROM enrollments WHERE code = ?').get(String(code).toUpperCase());
   if (!enr) return res.status(404).json({ error: 'קוד רישום לא קיים' });
@@ -77,8 +81,8 @@ router.post('/enroll', enrollLimiter, (req, res) => {
     const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, idle_return_seconds, model, android_ver, app_version, last_seen)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(owner.id, serial, enr.name || `מכשיר ${serial.slice(-4)}`, token,
-           enr.allowed_host, enr.home_url, enr.idle_return_seconds ?? 0, req.body.model || null,
-           req.body.androidVersion || null, req.body.appVersion || null, now);
+           enr.allowed_host, enr.home_url, enr.idle_return_seconds ?? 0, sanitizeDeviceInfo(req.body.model),
+           sanitizeDeviceInfo(req.body.androidVersion), sanitizeDeviceInfo(req.body.appVersion), now);
     device = db.prepare('SELECT * FROM devices WHERE id = ?').get(info.lastInsertRowid);
   }
 
@@ -126,8 +130,8 @@ router.post('/heartbeat', (req, res) => {
   db.prepare(`UPDATE devices SET online = 1, last_seen = datetime('now'),
      status = COALESCE(?, status), battery = COALESCE(?, battery),
      app_version = COALESCE(?, app_version), ip = COALESCE(?, ip) WHERE id = ?`)
-    .run(b.status ?? null, b.battery ?? null, b.appVersion ?? null,
-         b.ip ?? req.ip ?? null, device.id);
+    .run(sanitizeDeviceInfo(b.status), b.battery ?? null, sanitizeDeviceInfo(b.appVersion),
+         sanitizeDeviceInfo(b.ip) ?? req.ip ?? null, device.id);
 
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   notifyConsolesOfDevice(fresh, {});
