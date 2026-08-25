@@ -758,10 +758,55 @@ async function loadEnrollments() {
   if (!open.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין קודים פתוחים.</p>'; return; }
   box.innerHTML = '<table><tr><th>קוד</th><th>אתר</th><th>שם</th><th></th></tr>' +
     open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td>
-      <td class="e-actions"><button class="btn btn-sm" data-usb="${e.id}">📦 USB אופליין</button> <button class="btn btn-sm" data-qr="${e.id}">📱 QR (מסלול A)</button> <button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
+      <td class="e-actions"><button class="btn btn-primary btn-sm" data-activate="${e.id}">🚀 הפעל</button> <button class="btn btn-sm" data-usb="${e.id}">📦 USB אופליין</button> <button class="btn btn-sm" data-qr="${e.id}">📱 QR (מסלול A)</button> <button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/enrollments/' + b.dataset.del, { method: 'DELETE' }); loadEnrollments(); });
   box.querySelectorAll('[data-usb]').forEach((b) => b.onclick = () => openUsbPackageForm(b));
   box.querySelectorAll('[data-qr]').forEach((b) => b.onclick = () => openQrPackageForm(b));
+  box.querySelectorAll('[data-activate]').forEach((b) => b.onclick = () => openInstallChecklist(b.dataset.activate));
+}
+
+// KIOSK_BUILD.md §2★ב "כפתור 'הפעל' → אשף התקנה עם צ'קליסט חי" — marked
+// "מחייב, גובר על כל השאר" in the spec. Unlike openUsbPackageForm/
+// openQrPackageForm above (inline in the row — they only ever need one more
+// input before a download), this stays open as a modal while the owner
+// walks away to the physical device and back, the same "does not vanish
+// when you look away" requirement a checklist implies that a download
+// button does not.
+const INSTALL_ROUTE_LABELS = { B: 'ADB (מסלול B, העיקרי)', A: 'QR / Zero-touch (מסלול A)', D: 'USB אופליין (מסלול D)' };
+async function openInstallChecklist(enrollmentId) {
+  const m = modal(`<h3>הפעלת מכשיר</h3>
+    <div class="field"><label>איזה מסלול אתם מתקינים?</label>
+      <select id="ic-route">${Object.entries(INSTALL_ROUTE_LABELS).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select>
+    </div>
+    <div id="ic-body">טוען…</div>
+    <div class="row" style="margin-top:12px"><button class="btn btn-light" id="ic-close">סגירה</button></div>`);
+  $('#ic-close', m).onclick = () => m.remove();
+  const routeSel = $('#ic-route', m);
+  const renderChecklist = async () => {
+    const body = $('#ic-body', m);
+    body.innerHTML = 'טוען…';
+    let checklist;
+    try { ({ checklist } = await api(`/enrollments/${enrollmentId}/checklist?route=${routeSel.value}`)); }
+    catch (e) { body.innerHTML = `<p style="color:#b91c1c">${esc(e.message)}</p>`; return; }
+    body.innerHTML = (checklist.allDone
+      ? `<div class="alert alert-ok" style="margin-bottom:10px">✅ כל השלבים סומנו כבוצעו — מרגע זה הקיוסק אמור להיות נעול ומנוהל מכאן. רעננו את רשימת המכשירים כדי לוודא שהוא מחובר.</div>` : '') +
+      checklist.steps.map((s, i) => `<div class="step-check" style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)">
+        <input type="checkbox" data-step="${esc(s.id)}" ${s.checked ? 'checked' : ''} style="margin-top:3px;width:18px;height:18px;flex:none" />
+        <div><b>${i + 1}. ${esc(s.title)}</b><p style="margin:4px 0;color:var(--ink)">${esc(s.detail)}</p>
+          <p style="margin:0;color:var(--muted);font-size:12px">🡒 אמור להופיע: ${esc(s.expect)}</p></div>
+      </div>`).join('');
+    body.querySelectorAll('[data-step]').forEach((cb) => {
+      cb.onchange = async () => {
+        cb.disabled = true;
+        try {
+          await api(`/enrollments/${enrollmentId}/checklist/${cb.dataset.step}`, { method: cb.checked ? 'POST' : 'DELETE' });
+          await renderChecklist();
+        } catch (e) { toast(e.message, false); cb.checked = !cb.checked; cb.disabled = false; }
+      };
+    });
+  };
+  routeSel.onchange = renderChecklist;
+  renderChecklist();
 }
 
 // KIOSK_BUILD.md §3 Route D: unlike every other per-row action here, this

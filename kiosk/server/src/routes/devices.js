@@ -9,6 +9,7 @@ import { buildWindowsKioskScript } from '../windowspackage.js';
 import { sanitizeSerial, buildUsbOfflineScript } from '../usbpackage.js';
 import { buildQrProvisioningPayload, DEVICE_ADMIN_COMPONENT_NAME } from '../qrprovision.js';
 import { isUpdateAvailable, buildUpdateAppPayload } from '../appupdate.js';
+import { buildChecklist, isValidStep, INSTALL_ROUTES } from '../installsteps.js';
 import { notifyConsolesOfDevice } from '../hub.js';
 import { config } from '../config.js';
 
@@ -217,6 +218,47 @@ router.delete('/enrollments/:id', requireAuth, (req, res) => {
   const enr = db.prepare('SELECT * FROM enrollments WHERE id = ?').get(req.params.id);
   if (!enr || enr.owner_id !== req.user.id) return res.sendStatus(404);
   db.prepare('DELETE FROM enrollments WHERE id = ?').run(enr.id);
+  res.json({ ok: true });
+});
+
+// KIOSK_BUILD.md §2★ב "כפתור 'הפעל' → אשף התקנה עם צ'קליסט חי" — the live,
+// route-aware install checklist for one enrollment code. `route` is a query
+// param, not a stored column on `enrollments`: an owner may open the wizard
+// more than once for the same code while deciding which physical route they
+// are actually using (e.g. tries QR, the device has no Google account, falls
+// back to plain ADB) — each route's steps/progress live independently under
+// their own "<route>:<n>" ids, so switching the dropdown never loses or
+// conflicts with the other route's ticked boxes.
+function ownedEnrollment(req) {
+  const enr = db.prepare('SELECT * FROM enrollments WHERE id = ?').get(req.params.id);
+  if (!enr || enr.owner_id !== req.user.id) return { error: 404 };
+  return { enr };
+}
+
+router.get('/enrollments/:id/checklist', requireAuth, (req, res) => {
+  const { enr, error } = ownedEnrollment(req);
+  if (error) return res.sendStatus(error);
+  const route = String(req.query.route || 'B').toUpperCase();
+  if (!INSTALL_ROUTES.includes(route)) return res.status(400).json({ error: 'מסלול לא נתמך' });
+  const checkedIds = db.prepare('SELECT step_id FROM enrollment_checklist WHERE enrollment_id = ?')
+    .all(enr.id).map((r) => r.step_id);
+  const checklist = buildChecklist(route, { code: enr.code, homeUrl: enr.home_url }, checkedIds);
+  res.json({ checklist, routes: INSTALL_ROUTES });
+});
+
+router.post('/enrollments/:id/checklist/:stepId', requireAuth, (req, res) => {
+  const { enr, error } = ownedEnrollment(req);
+  if (error) return res.sendStatus(error);
+  const route = req.params.stepId.split(':')[0];
+  if (!isValidStep(route, req.params.stepId)) return res.status(400).json({ error: 'שלב לא מוכר' });
+  db.prepare('INSERT OR IGNORE INTO enrollment_checklist (enrollment_id, step_id) VALUES (?, ?)').run(enr.id, req.params.stepId);
+  res.json({ ok: true });
+});
+
+router.delete('/enrollments/:id/checklist/:stepId', requireAuth, (req, res) => {
+  const { enr, error } = ownedEnrollment(req);
+  if (error) return res.sendStatus(error);
+  db.prepare('DELETE FROM enrollment_checklist WHERE enrollment_id = ? AND step_id = ?').run(enr.id, req.params.stepId);
   res.json({ ok: true });
 });
 

@@ -187,6 +187,21 @@ CREATE TABLE IF NOT EXISTS policy_snapshots (
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- KIOSK_BUILD.md §2★ב "כפתור 'הפעל' → אשף התקנה עם צ'קליסט חי": which of a
+-- given enrollment's install steps (installsteps.js, keyed "<route>:<n>",
+-- e.g. "B:2") the owner has already ticked off. Keyed by enrollment, not
+-- device — the checklist exists *before* a device row does (the whole point
+-- is guiding the owner through the steps that create one) — and survives the
+-- code being marked used, so a completed checklist stays visible if the
+-- owner reopens it. Deleting the enrollment (code deleted/rotated) cascades,
+-- same as every other enrollment-scoped row in this file.
+CREATE TABLE IF NOT EXISTS enrollment_checklist (
+  enrollment_id INTEGER NOT NULL REFERENCES enrollments(id) ON DELETE CASCADE,
+  step_id       TEXT NOT NULL,
+  checked_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (enrollment_id, step_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_devices_owner ON devices(owner_id);
 CREATE INDEX IF NOT EXISTS idx_commands_device ON commands(device_id, status);
 CREATE INDEX IF NOT EXISTS idx_events_device ON events(device_id);
