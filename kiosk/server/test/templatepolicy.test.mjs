@@ -22,6 +22,23 @@ test('buildTemplateFields requires a non-blank name when name is touched', () =>
   assert.equal(buildTemplateFields({ name: ' Evening ' }).fields.name, 'Evening');
 });
 
+test('buildTemplateFields rejects a non-string name instead of silently stringifying it', () => {
+  // Used to go straight into String(b.name ?? '').trim() and store the
+  // coerced junk ("[object Object]" / "1,2,3") with no error at all —
+  // reproduced live against a real server before this fix.
+  assert.match(buildTemplateFields({ name: { pwn: 1 } }).error, /טקסט/);
+  assert.match(buildTemplateFields({ name: [1, 2, 3] }).error, /טקסט/);
+  assert.match(buildTemplateFields({ name: true }).error, /טקסט/);
+  assert.match(buildTemplateFields({ name: 5 }).error, /טקסט/);
+});
+
+test('buildTemplateFields caps name length the same 120 chars as devices/clients/links', () => {
+  const { error } = buildTemplateFields({ name: 'א'.repeat(121) });
+  assert.match(error, /ארוך מדי/);
+  const { fields } = buildTemplateFields({ name: 'א'.repeat(120) });
+  assert.equal(fields.name.length, 120);
+});
+
 test('buildTemplateFields normalizes an allow-list the same way a device edit does', () => {
   const { fields } = buildTemplateFields({ allowedHost: 'Example.com, pay.example.com' });
   assert.equal(fields.allowed_host, 'example.com,pay.example.com');

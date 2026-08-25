@@ -3,6 +3,7 @@ import { db, logEvent } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { applyDevicePolicy } from '../policy.js';
 import { buildTemplateFields, policyPatchFromTemplate, templateColumns } from '../templatepolicy.js';
+import { validateName } from '../names.js';
 
 // KIOSK_BUILD.md §8 "קבוצות/תבניות: להחיל מדיניות על קבוצת מכשירים בבת אחת" —
 // a saved policy an owner applies to many of their own devices at once,
@@ -41,7 +42,12 @@ router.get('/templates', requireAuth, (req, res) => {
 
 router.post('/templates', requireAuth, (req, res) => {
   const body = req.body || {};
-  if (!String(body.name ?? '').trim()) return res.status(400).json({ error: 'נדרש שם לתבנית' });
+  // Same type/length gate templatepolicy.js's buildTemplateFields now applies
+  // when `name` is present on a PATCH — done here too since POST requires a
+  // name up front, before buildTemplateFields ever sees the body.
+  const nameCheck = validateName(body.name, 'שם התבנית');
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  if (!nameCheck.value) return res.status(400).json({ error: 'נדרש שם לתבנית' });
   const { fields, error } = buildTemplateFields(body);
   if (error) return res.status(400).json({ error });
   const dup = db.prepare('SELECT id FROM templates WHERE owner_id = ? AND name = ?').get(req.user.id, fields.name);

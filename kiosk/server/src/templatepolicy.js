@@ -25,6 +25,7 @@ import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
+import { validateName } from './names.js';
 
 /**
  * Validate + normalize whatever subset of template fields is present in
@@ -37,9 +38,18 @@ export function buildTemplateFields(body) {
   const fields = {};
 
   if (b.name !== undefined) {
-    const name = String(b.name ?? '').trim();
-    if (!name) return { error: 'נדרש שם לתבנית' };
-    fields.name = name;
+    // `name` used to go straight into `String(b.name ?? '').trim()` — never
+    // throws, but silently stores "[object Object]"/"1,2,3" for a
+    // non-string value instead of rejecting it (the same gap clients.js/
+    // links.js/devices.js each had before names.js's validateName; see its
+    // header comment), and had no length cap at all where every other `name`
+    // door on the platform caps at 120 chars. Reproduced live: an object or
+    // array `name` on POST /api/templates stored the coerced junk string
+    // with a 200, and a 500-char name was accepted whole.
+    const nameCheck = validateName(b.name, 'שם התבנית');
+    if (!nameCheck.ok) return { error: nameCheck.error };
+    if (!nameCheck.value) return { error: 'נדרש שם לתבנית' };
+    fields.name = nameCheck.value;
   }
 
   if (b.homeUrl !== undefined) {
