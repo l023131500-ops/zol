@@ -5,6 +5,7 @@ import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { hostAllowed, hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
+import { clampIdleReturnSeconds } from '../idletimeout.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -176,7 +177,7 @@ router.post('/enrollments', requireAuth, (req, res) => {
   if (!checked.value) return res.status(400).json({ error: 'בחרו קישור מהספרייה או הזינו כתובת אתר' });
   homeUrl = checked.value;
   const host = hostsForUrl(homeUrl, allowedHost);
-  const idle = Math.max(0, Number(idleReturnSeconds) || 0);
+  const idle = clampIdleReturnSeconds(idleReturnSeconds);
   const code = codeGen();
   const expires = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString();
   const info = db.prepare('INSERT INTO enrollments (owner_id, code, name, home_url, allowed_host, idle_return_seconds, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
