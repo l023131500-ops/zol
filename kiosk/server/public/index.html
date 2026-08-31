@@ -18,8 +18,8 @@
         ? mq.addEventListener("change", function (e) { apply(e.matches); })
         : mq.addListener(function (e) { apply(e.matches); });
     })();
-  </script>  <title>KioskFleet — נעילת מכשיר לקישורים מאושרים בלבד</title>
-  <meta name="description" content="נועלים מכשיר אנדרואיד על רשימת כתובות מאושרות בלבד. המכשיר פותח רק את מה שאישרתם — גם כשאין רשת — ואתם שולטים בו מרחוק ממסך אחד." />
+  </script>  <title>KioskFleet — יצרנית קיוסקים: מכשיר שפותח רק מה שאישרתם</title>
+  <meta name="description" content="הופכים כל מכשיר — אנדרואיד, Windows או USB אופליין מוחלט — לקיוסק נעול על רשימת כתובות מאושרות, עם תשלום מאובטח, תצוגת מולטימדיה ומיתוג ללקוח. גם בלי רשת. שליטה מרחוק ממסך אחד." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- Off the paint path: Lighthouse charged 480ms of render-blocking to this
@@ -59,6 +59,7 @@
       <div class="brand"><span class="logo">◈</span> KioskFleet</div>
       <nav class="nav-links">
         <a href="#what">מה זה עושה</a>
+        <a href="#routes">מסלולי התקנה</a>
         <a href="#features">יכולות</a>
         <a href="#how">איך מתחילים</a>
         <a href="#pricing">מחירים</a>
@@ -75,17 +76,18 @@
       <p class="lead">
         אתם קובעים רשימת כתובות מותרות — אחת או כמה. המכשיר נעול עליהן בלבד:
         אין דפדפן חופשי, אין יציאה למסך הבית, אין הפתעות. וכשאין רשת, הנעילה
-        ממשיכה להחזיק בדיוק אותו דבר.
+        ממשיכה להחזיק בדיוק אותו דבר. עובד על אנדרואיד (עם או בלי גוגל), על
+        Windows, ואפילו בלי אינטרנט בכלל דרך USB — אותה מערכת ניהול לכולם.
       </p>
       <div class="hero-cta">
         <a href="console" class="btn btn-primary">כניסה למערכת הניהול</a>
         <a href="#how" class="btn btn-ghost">איך מתחילים?</a>
       </div>
       <div class="hero-badges">
-        <div><b>רשימה</b> כתובות מאושרות</div>
+        <div><b>4 מסלולי התקנה</b> אנדרואיד / Windows / USB אופליין</div>
         <div><b>גם בלי רשת</b> הנעילה מחזיקה</div>
         <div><b>מרחוק</b> שינוי בזמן אמת</div>
-        <div><b>לפי מכשיר</b> הגדרה נפרדת לכל אחד</div>
+        <div><b>לפי לקוח</b> מיתוג ואתר תדמית נפרדים</div>
       </div>
     </div>
   </section>
@@ -116,6 +118,24 @@
     </div>
   </section>
 
+  <!-- KIOSK_BUILD.md §3 — the four install routes are the actual product
+       category ("יצרנית קיוסקים"), not an implementation detail, so a
+       first-time visitor needs to see them before deciding this fits their
+       hardware. Kept to the same .feature/.grid-4 pattern the rest of the
+       page already uses — no new CSS. -->
+  <section class="section" id="routes">
+    <div class="container">
+      <h2>כל סוג מכשיר, אותה מערכת</h2>
+      <p class="sub">בוחרים את המכשיר שיש לכם — המערכת בוחרת את מסלול ההתקנה הנכון ומפיקה את הפקודה או החבילה בלחיצה.</p>
+      <div class="grid grid-4">
+        <div class="feature"><div class="ico">🅰️</div><h3>אנדרואיד עם Google</h3><p>רישום קל בסריקת QR או Zero-touch — מתאים למכשירים איכותיים עם Play מאושר.</p></div>
+        <div class="feature"><div class="ico">🅱️</div><h3>אנדרואיד גנרי / סיני</h3><p>המסלול העיקרי לצי המיובא: התקנה חד-פעמית ב-ADB, אחר כך נעול ומנוהל לגמרי אופליין.</p></div>
+        <div class="feature"><div class="ico">🪟</div><h3>Windows</h3><p>חבילת קיוסק למסכים גדולים באולמות וחנויות — Assigned Access או Shell Launcher, הרצה כמנהל וזהו.</p></div>
+        <div class="feature"><div class="ico">💾</div><h3>USB אופליין מוחלט</h3><p>חבילת התקנה שנצרבת ל-USB ורצה בלי אינטרנט בכלל — לאתרים בלי חיבור קבוע.</p></div>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="features" style="background:#fff;">
     <div class="container">
       <h2>שליטה מלאה. מכל מקום.</h2>
@@ -127,6 +147,9 @@
         <div class="feature"><div class="ico">⚡</div><h3>הפעלה אוטומטית</h3><p>המכשיר עולה עם ההדלקה, חוזר לאתר אחרי קריסה, והמסך נשאר דלוק.</p></div>
         <div class="feature"><div class="ico">🩺</div><h3>ניטור בזמן אמת</h3><p>מחובר או מנותק, סוללה, דגם, גרסה וכתובת IP — עם היסטוריית אירועים לכל מכשיר.</p></div>
         <div class="feature"><div class="ico">👥</div><h3>ניהול רב-משתמשים</h3><p>כל לקוח עם חשבון ומכסת מכשירים משלו. מנהל-על רואה ושולט בצי כולו.</p></div>
+        <div class="feature"><div class="ico">🏷️</div><h3>מיתוג ללקוח</h3><p>רושמים ללקוחות שלכם מזהה, קישור ואתר תדמית משלהם — במכשיר מספיק להקליד את המזהה כדי שהתצוגה הנכונה תיפתח.</p></div>
+        <div class="feature"><div class="ico">🖼️</div><h3>תצוגת מולטימדיה (Digital Signage)</h3><p>רוטציית תמונות ותוכן כשאין אינטראקציה — מתאים למסכי פרסום וקבלת פנים.</p></div>
+        <div class="feature"><div class="ico">💳</div><h3>תשלום מאובטח (טסט)</h3><p>הקלדה ידנית, קורא שמזין ספרות בלבד, או מסופון EMV מוצפן — בלי לשמור מספר כרטיס בשום מצב.</p></div>
       </div>
     </div>
   </section>
@@ -150,8 +173,8 @@
       <p class="sub">משלמים לפי מספר המכשירים. מנהל-העל קובע את המכסה לכל לקוח.</p>
       <div class="pricing">
         <div class="plan"><h3>Starter</h3><div class="price">₪49<small>/חודש</small></div><ul><li>עד 3 מכשירים</li><li>רשימת כתובות מלאה</li><li>שליטה מרחוק</li><li>תמיכה במייל</li></ul><a href="console" class="btn btn-light">התחלה</a></div>
-        <div class="plan featured"><h3>Business</h3><div class="price">₪149<small>/חודש</small></div><ul><li>עד 15 מכשירים</li><li>ספריית קישורים</li><li>ניטור והיסטוריה</li><li>תמיכה מועדפת</li></ul><a href="console" class="btn btn-primary">הנפוץ ביותר</a></div>
-        <div class="plan"><h3>Enterprise</h3><div class="price">מותאם</div><ul><li>מכשירים ללא הגבלה</li><li>מנהל-על ייעודי</li><li>Device Owner מנוהל</li><li>SLA ותמיכה טלפונית</li></ul><a href="console" class="btn btn-light">דברו איתנו</a></div>
+        <div class="plan featured"><h3>Business</h3><div class="price">₪149<small>/חודש</small></div><ul><li>עד 15 מכשירים</li><li>ספריית קישורים</li><li>מיתוג ואתר תדמית ללקוח</li><li>ניטור והיסטוריה</li><li>תמיכה מועדפת</li></ul><a href="console" class="btn btn-primary">הנפוץ ביותר</a></div>
+        <div class="plan"><h3>Enterprise</h3><div class="price">מותאם</div><ul><li>מכשירים ללא הגבלה</li><li>Windows + USB אופליין</li><li>תצוגת מולטימדיה ותשלום</li><li>מנהל-על ייעודי</li><li>SLA ותמיכה טלפונית</li></ul><a href="console" class="btn btn-light">דברו איתנו</a></div>
       </div>
     </div>
   </section>
