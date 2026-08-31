@@ -1,13 +1,25 @@
 import express from 'express';
 import { customAlphabet } from 'nanoid';
-import { db, logEvent } from '../db.js';
+import { db, logEvent, approvedClientsForDevice, nextAccessCode } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { hostAllowed, hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
+import { buildWindowsKioskScript } from '../windowspackage.js';
+import { sanitizeSerial, buildUsbOfflineScript } from '../usbpackage.js';
+import { buildQrProvisioningPayload, DEVICE_ADMIN_COMPONENT_NAME } from '../qrprovision.js';
+import { notifyConsolesOfDevice } from '../hub.js';
+import { config } from '../config.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
+// Same alphabet/length as routes/agent.js's own `tokenGen` — not imported
+// from there because this endpoint provisions a device from fields the
+// network /enroll route never has (no model/androidVersion/appVersion; the
+// device hasn't run yet), and touching that already-live, already-tested
+// handler for an unrelated feature is a bigger risk than the few duplicated
+// lines below (kept deliberately close to it so the two stay easy to compare).
+const deviceTokenGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghijkmnpqrstuvwxyz', 40);
 
 // Fetch a device, enforcing ownership (admins may access any device).
 //
@@ -59,6 +71,32 @@ router.get('/devices/:id/screenshot', requireAuth, (req, res) => {
   if (error) return res.sendStatus(error);
   if (!device.last_screenshot) return res.sendStatus(404);
   res.json({ image: device.last_screenshot, takenAt: device.last_screenshot_at });
+});
+
+// KIOSK_BUILD.md §3 Route C / §10: a device row already holds everything the
+// Windows package needs (homeUrl, allowedHost, name) — the same fields Route
+// B's enrollment/update_config already build a device identity from — so
+// there is nothing new to configure here beyond picking this device.
+// text/plain rather than JSON: the console downloads this as a .ps1 file
+// (see downloadFile() in app.js), not something it parses.
+router.get('/devices/:id/windows-package', requireAuth, (req, res) => {
+  const { device, error } = getOwnedDevice(req, req.params.id);
+  if (error) return res.sendStatus(error);
+  let script;
+  try {
+    script = buildWindowsKioskScript({
+      deviceName: device.name, homeUrl: device.home_url, allowedHost: device.allowed_host,
+      idleTimeoutMinutes: device.idle_return_seconds ? Math.ceil(device.idle_return_seconds / 60) : undefined,
+    });
+  } catch (e) {
+    // Only reachable for a device enrolled before home_url was required, or
+    // one an owner cleared without setting a replacement — every other path
+    // to a device row already enforces a valid home_url (see enrollments'
+    // own `new URL(homeUrl)` check above).
+    return res.status(400).json({ error: e.message });
+  }
+  res.setHeader('Content-Disposition', `attachment; filename="kioskfleet-${device.serial}.ps1"`);
+  res.type('text/plain; charset=utf-8').send(script);
 });
 
 // ── Client approvals (KIOSK_BUILD.md §2★ד/ה) ──────────────────────
@@ -192,6 +230,119 @@ router.delete('/enrollments/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// KIOSK_BUILD.md §3 Route D + §6 + §10-D: a fully offline install. Every
+// other route lets the *device* redeem the code over the network, at the
+// venue; §10-D's own steps require zero internet at the venue, so this
+// endpoint provisions the device row right now, while the owner is still at
+// their desk and online, from a serial they already read off the physical
+// unit (`adb devices`). text/plain, like the Windows package: the console
+// downloads this as a .sh file, not something it parses.
+router.post('/enrollments/:id/usb-package', requireAuth, (req, res) => {
+  const enr = db.prepare('SELECT * FROM enrollments WHERE id = ?').get(req.params.id);
+  if (!enr || enr.owner_id !== req.user.id) return res.sendStatus(404);
+  if (enr.used) return res.status(409).json({ error: 'קוד רישום כבר נוצל' });
+  if (enr.expires_at && new Date(enr.expires_at) < new Date())
+    return res.status(410).json({ error: 'קוד רישום פג תוקף' });
+
+  const serial = sanitizeSerial(req.body?.serial);
+  if (!serial) return res.status(400).json({ error: 'נא להזין מספר סידורי (מהפקודה adb devices)' });
+
+  // Same re-enroll-vs-new-device split /api/agent/enroll makes, but here the
+  // "already exists" case matters more: an owner may re-generate this
+  // package to rotate a lost/leaked token for hardware they already own.
+  const existing = db.prepare('SELECT * FROM devices WHERE serial = ?').get(serial);
+  if (existing && existing.owner_id !== req.user.id) {
+    return res.status(409).json({ error: 'מכשיר זה כבר רשום לחשבון אחר' });
+  }
+  if (!existing) {
+    const count = db.prepare('SELECT COUNT(*) c FROM devices WHERE owner_id = ?').get(req.user.id).c;
+    if (count >= req.user.device_limit) {
+      return res.status(403).json({ error: 'הגעת למכסת המכשירים המותרת בחשבון' });
+    }
+  }
+
+  const token = deviceTokenGen();
+  const now = new Date().toISOString();
+  let device;
+  if (existing) {
+    db.prepare('UPDATE devices SET device_token = ?, name = COALESCE(?, name), home_url = ?, allowed_host = ?, idle_return_seconds = ?, last_seen = ? WHERE id = ?')
+      .run(token, enr.name, enr.home_url, enr.allowed_host, enr.idle_return_seconds ?? 0, now, existing.id);
+    device = db.prepare('SELECT * FROM devices WHERE id = ?').get(existing.id);
+  } else {
+    const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, idle_return_seconds, last_seen, access_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(req.user.id, serial, enr.name || `מכשיר ${serial.slice(-4)}`, token, enr.allowed_host, enr.home_url, enr.idle_return_seconds ?? 0, now, nextAccessCode());
+    device = db.prepare('SELECT * FROM devices WHERE id = ?').get(info.lastInsertRowid);
+  }
+
+  db.prepare('UPDATE enrollments SET used = 1, device_id = ? WHERE id = ?').run(device.id, enr.id);
+  logEvent(device.id, req.user.id, 'enrolled_offline_usb', `serial=${serial}`);
+  notifyConsolesOfDevice(device, {});
+
+  let script;
+  try {
+    script = buildUsbOfflineScript({
+      serial, deviceToken: token, deviceName: device.name, homeUrl: device.home_url, allowedHost: device.allowed_host,
+      idleReturnSeconds: device.idle_return_seconds, adminCode: device.exit_code || '',
+      displayZoomPercent: device.display_zoom_percent, displayOrientation: device.display_orientation,
+      approvedClients: approvedClientsForDevice(device.id),
+    });
+  } catch (e) {
+    // Device row is already provisioned at this point (matching how a
+    // network re-enroll would have also already rotated the token before
+    // any response is sent) — only reachable if home_url is somehow still
+    // missing, which the enrollment-creation route already prevents.
+    return res.status(400).json({ error: e.message });
+  }
+  res.setHeader('Content-Disposition', `attachment; filename="kioskfleet-offline-${serial}.sh"`);
+  res.type('text/plain; charset=utf-8').send(script);
+});
+
+// KIOSK_BUILD.md §3 Route A + §10-A: the QR provisioning payload for an
+// existing, unused enrollment code — the same code Route B's manual entry
+// already redeems, just delivered by scanning instead of typing. Unlike
+// usb-package above, no device row is provisioned here and the code is not
+// consumed: a Route A device only reaches the network *during* provisioning
+// (to download the DPC APK), so it enrolls for real the normal online way,
+// through the existing rate-limited /api/agent/enroll, once EnrollActivity
+// applies this bundle — see qrprovision.js's own header for why a
+// short-lived code rides here rather than usb-package's raw deviceToken.
+// JSON (not text/plain like the .ps1/.sh downloads above): this is not a
+// script to run, it is a payload the console shows for copying into an
+// offline/local QR generator — see the security note in its own response.
+router.post('/enrollments/:id/qr-package', requireAuth, (req, res) => {
+  const enr = db.prepare('SELECT * FROM enrollments WHERE id = ?').get(req.params.id);
+  if (!enr || enr.owner_id !== req.user.id) return res.sendStatus(404);
+  if (enr.used) return res.status(409).json({ error: 'קוד רישום כבר נוצל' });
+  if (enr.expires_at && new Date(enr.expires_at) < new Date())
+    return res.status(410).json({ error: 'קוד רישום פג תוקף' });
+
+  let payload;
+  try {
+    payload = buildQrProvisioningPayload({
+      code: enr.code,
+      serverUrl: `${config.publicUrl}${config.basePath}`,
+      apkUrl: config.kioskAgentApkUrl,
+      apkSignatureChecksum: config.kioskAgentApkSignatureChecksum,
+      wifiSsid: req.body?.wifiSsid, wifiPassword: req.body?.wifiPassword, wifiSecurityType: req.body?.wifiSecurityType,
+    });
+  } catch (e) {
+    // Not configured (KIOSK_AGENT_APK_URL/_CHECKSUM missing) or a malformed
+    // enrollment code — either way there is nothing to generate yet, not a
+    // server error.
+    return res.status(501).json({ error: e.message });
+  }
+  res.json({
+    payload,
+    payloadJson: JSON.stringify(payload, null, 2),
+    componentName: DEVICE_ADMIN_COMPONENT_NAME,
+    // Shown by the console next to the payload — this text carries the
+    // owner's own enrollment code, so uploading it to a random online QR
+    // generator hands that code to a third party same as pasting a password.
+    warning: 'אין להדביק טקסט זה במחולל QR מקוון חיצוני — הוא מכיל את קוד הרישום. יש להשתמש במחולל QR מקומי/אופליין בלבד.',
+  });
+});
+
 function publicDevice(d) {
   return {
     id: d.id, name: d.name, serial: d.serial, ownerId: d.owner_id, ownerName: d.owner_name,
@@ -201,12 +352,30 @@ function publicDevice(d) {
     androidVer: d.android_ver, ip: d.ip, createdAt: d.created_at, exitCode: d.exit_code || '',
     lastScreenshotAt: d.last_screenshot_at || null,
     displayZoomPercent: d.display_zoom_percent ?? 100,
+    displayOrientation: d.display_orientation || 'landscape',
     scheduleEnabled: !!d.schedule_enabled, scheduleOpenTime: d.schedule_open_time || '',
     scheduleCloseTime: d.schedule_close_time || '',
     signageEnabled: !!d.signage_enabled, signageUrls: d.signage_urls || '',
     signageIntervalSeconds: d.signage_interval_seconds ?? 15,
     maintenanceEnabled: !!d.maintenance_enabled, maintenanceMessage: d.maintenance_message || '',
+    accessCode: d.access_code || '',
+    paymentMode: d.payment_mode || 'none',
   };
 }
+
+// KIOSK_BUILD.md §2★ז: an owner who suspects their launcher code leaked
+// (e.g. shared over an unencrypted channel to a technician) can rotate it
+// without touching device_token or any other field — same "rotate this one
+// secret, leave everything else alone" shape re-enrolling already gives
+// device_token. The old code stops resolving at GET /api/public/launcher/:code
+// the instant this commits, since that route looks the row up by access_code.
+router.post('/devices/:id/access-code/regenerate', requireAuth, (req, res) => {
+  const { device, error } = getOwnedDevice(req, req.params.id);
+  if (error) return res.sendStatus(error);
+  const code = nextAccessCode();
+  db.prepare('UPDATE devices SET access_code = ? WHERE id = ?').run(code, device.id);
+  logEvent(device.id, req.user.id, 'access_code_regenerated', null);
+  res.json({ accessCode: code });
+});
 
 export default router;

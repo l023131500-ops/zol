@@ -26,17 +26,20 @@ test('snapshotFieldsFromDevice extracts exactly the policy subset, nothing else'
     id: 1, name: 'should not leak', owner_id: 9, device_token: 'secret',
     home_url: 'https://a.example/', allowed_host: 'a.example',
     idle_return_seconds: 30, exit_code: '4321', display_zoom_percent: 150,
+    display_orientation: 'portrait',
     schedule_enabled: 1, schedule_open_time: '09:00', schedule_close_time: '21:00',
     signage_enabled: 0, signage_urls: null, signage_interval_seconds: 15,
-    maintenance_enabled: 1, maintenance_message: 'בתחזוקה עד 14:00',
+    maintenance_enabled: 1, maintenance_message: 'בתחזוקה עד 14:00', payment_mode: 'emv',
   };
   const fields = snapshotFieldsFromDevice(device);
   assert.deepEqual(Object.keys(fields).sort(), [...SNAPSHOT_COLUMNS].sort());
   assert.equal(fields.home_url, 'https://a.example/');
   assert.equal(fields.exit_code, '4321');
   assert.equal(fields.display_zoom_percent, 150);
+  assert.equal(fields.display_orientation, 'portrait');
   assert.equal(fields.maintenance_enabled, 1);
   assert.equal(fields.maintenance_message, 'בתחזוקה עד 14:00');
+  assert.equal(fields.payment_mode, 'emv');
   assert.equal('name' in fields, false);
   assert.equal('device_token' in fields, false);
 });
@@ -46,6 +49,8 @@ test('policyFieldsPresent is true when any policy-affecting key is present', () 
   assert.equal(policyFieldsPresent({ exitCode: '' }), true); // '' is a real "clear" value, still present
   assert.equal(policyFieldsPresent({ scheduleEnabled: false }), true);
   assert.equal(policyFieldsPresent({ maintenanceEnabled: true }), true);
+  assert.equal(policyFieldsPresent({ paymentMode: 'manual' }), true);
+  assert.equal(policyFieldsPresent({ displayOrientation: 'portrait' }), true);
 });
 
 test('policyFieldsPresent is false for a name-only or empty body', () => {
@@ -60,9 +65,10 @@ test('patchFromSnapshot restores every captured field, mirroring a template row 
     id: 7, device_id: 3, reason: 'לפני עריכה ידנית',
     home_url: 'https://b.example/', allowed_host: 'b.example',
     idle_return_seconds: 0, exit_code: '9876', display_zoom_percent: 100,
+    display_orientation: 'portrait',
     schedule_enabled: 0, schedule_open_time: null, schedule_close_time: null,
     signage_enabled: 1, signage_urls: 'https://b.example/promo', signage_interval_seconds: 20,
-    maintenance_enabled: 1, maintenance_message: 'בתחזוקה',
+    maintenance_enabled: 1, maintenance_message: 'בתחזוקה', payment_mode: 'manual',
   };
   const patch = patchFromSnapshot(snapshotRow);
   assert.equal(patch.homeUrl, 'https://b.example/');
@@ -70,12 +76,14 @@ test('patchFromSnapshot restores every captured field, mirroring a template row 
   assert.equal(patch.idleReturnSeconds, 0);
   assert.equal(patch.exitCode, '9876');
   assert.equal(patch.displayZoomPercent, 100);
+  assert.equal(patch.displayOrientation, 'portrait');
   assert.equal(patch.scheduleEnabled, false);
   assert.equal(patch.signageEnabled, true);
   assert.equal(patch.signageUrls, 'https://b.example/promo');
   assert.equal(patch.signageIntervalSeconds, 20);
   assert.equal(patch.maintenanceEnabled, true);
   assert.equal(patch.maintenanceMessage, 'בתחזוקה');
+  assert.equal(patch.paymentMode, 'manual');
 });
 
 test('patchFromSnapshot clears exit_code on restore when the snapshot captured "unset" (NULL) — the gap templatepolicy.js\'s row mapper would miss', () => {

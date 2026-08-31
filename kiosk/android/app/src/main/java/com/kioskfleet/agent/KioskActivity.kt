@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
@@ -68,6 +69,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private var activeClientCode: String? = null  // non-null while showing an approved client's site (§2★ה); null = on the device's own home
     private var idleReturnSeconds = 0
     private var displayZoomPercent = 100
+    private var displayOrientation = "landscape"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tapResetRunnable: Runnable? = null
     private var relockRunnable: Runnable? = null
@@ -210,6 +212,8 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         deviceAllowedHosts = allowedHosts
         idleReturnSeconds = Prefs.get(this, Prefs.IDLE_RETURN).toIntOrNull() ?: 0
         displayZoomPercent = Prefs.get(this, Prefs.DISPLAY_ZOOM).toIntOrNull() ?: 100
+        displayOrientation = Prefs.get(this, Prefs.DISPLAY_ORIENTATION).ifEmpty { "landscape" }
+        applyOrientation()
 
         acquireWakeLock(); lockScreenOn(); hideSystemUI()
         setupWebView()
@@ -368,6 +372,28 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
             "document.documentElement.style.zoom='${pct}%';", null)
     }
 
+    /**
+     * KIOSK_BUILD.md §5 "בחירת אוריינטציה: אורך / רוחב — נכפה על המכשיר".
+     * AndroidManifest.xml's static `android:screenOrientation="landscape"` on
+     * this activity is only the pre-config-load default (the brief window
+     * before Prefs/AgentClient can supply the real, server-chosen value —
+     * e.g. this device's very first cold start before enrollment even runs).
+     * `setRequestedOrientation()` overrides it at runtime and takes effect
+     * immediately, the same "manifest is only the fallback, the live Prefs
+     * value always wins" shape zoom/idle-return/every other per-device policy
+     * field on this activity already has. Unknown/invalid values (should
+     * never reach here — orientation.js validates server-side, and Prefs is
+     * only ever written from that validated payload) fall back to landscape,
+     * matching every device's behavior before this field existed.
+     */
+    private fun applyOrientation() {
+        requestedOrientation = when (displayOrientation) {
+            "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            "auto" -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            else -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+    }
+
     private fun toast(m: String) = runOnUiThread { Toast.makeText(this, m, Toast.LENGTH_SHORT).show() }
 
     // ── CommandHandler (remote commands) ────────────────────────
@@ -424,11 +450,18 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         } catch (e: Exception) { null }
         agent.uploadScreenshot(commandId, bitmap)
     }
-    override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int, zoomPercent: Int) {
+    override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int, zoomPercent: Int, orientation: String) {
         deviceAllowedHosts = host
         idleReturnSeconds = idleSeconds
         val zoomChanged = zoomPercent != displayZoomPercent
         displayZoomPercent = zoomPercent
+        // Independent of navigation, same reasoning as applyMaintenanceState()
+        // below: an operator locking/unlocking a device's orientation must
+        // take effect immediately, not wait for an unrelated homeUrl push.
+        if (orientation != displayOrientation) {
+            displayOrientation = orientation
+            applyOrientation()
+        }
         // AgentClient.kt already persisted the fresh Prefs.MAINTENANCE_*
         // values (both the heartbeat and update_config paths) before this
         // callback fires; applying it here, independent of the homeUrl/zoom

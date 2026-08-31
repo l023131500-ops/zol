@@ -13,9 +13,11 @@ import { issueCommand } from './commands.js';
 import { hostsForUrl, normalizeHostCsv, parseHosts, normalizeHomeUrl } from './hosts.js';
 import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
+import { validateOrientation } from './orientation.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
+import { validatePaymentMode } from './payment.js';
 import { SNAPSHOT_COLUMNS, MAX_SNAPSHOTS_PER_DEVICE, snapshotFieldsFromDevice, policyFieldsPresent } from './snapshots.js';
 
 /**
@@ -55,7 +57,11 @@ export function pushConfigUpdate(device, userId) {
     signageEnabled: !!device.signage_enabled, signageUrls: device.signage_urls || '',
     signageIntervalSeconds: device.signage_interval_seconds,
     maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
+    displayOrientation: device.display_orientation || 'landscape',
   }, userId ?? null);
+  // paymentMode is deliberately NOT included above — see payment.js's own
+  // comment: it never changes what the agent enforces, so it never rides on
+  // update_config the way every field above it does.
 }
 
 /**
@@ -73,10 +79,10 @@ export function pushConfigUpdate(device, userId) {
  * spends a slot in the 20-snapshot budget for nothing it would protect.
  */
 export function applyDevicePolicy(device, body, userId, snapshotReason) {
-  let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent,
+  let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent, displayOrientation,
         scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
         signageEnabled, signageUrls, signageIntervalSeconds,
-        maintenanceEnabled, maintenanceMessage } = body || {};
+        maintenanceEnabled, maintenanceMessage, paymentMode } = body || {};
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
@@ -144,6 +150,28 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
     const v = validateMaintenanceMessage(message);
     if (!v.ok) return { ok: false, status: 400, error: v.error };
     maintenanceValues = { enabled: maintenanceEnabled ? 1 : 0, message: v.value };
+  }
+
+  // KIOSK_BUILD.md §7 "תשלום ואמצעי קלט (3 אופציות)": unlike the conditional
+  // groups above, this is a single field with its own always-valid default
+  // ('none'), so — like exitCode above — it is simply validated whenever the
+  // caller touches it at all, not re-derived from the device's existing value.
+  let paymentModeValue = null;
+  if (paymentMode !== undefined) {
+    const v = validatePaymentMode(paymentMode);
+    if (!v.ok) return { ok: false, status: 400, error: v.error };
+    paymentModeValue = v.value;
+  }
+
+  // KIOSK_BUILD.md §5 "בחירת אוריינטציה": same single-field shape as
+  // paymentMode above — validated whenever the caller touches it at all,
+  // not re-derived from the device's existing value (unlike exitCode above,
+  // there is no "clear" case: every device always has a real orientation).
+  let orientationValue = null;
+  if (displayOrientation !== undefined) {
+    const v = validateOrientation(displayOrientation);
+    if (!v.ok) return { ok: false, status: 400, error: v.error };
+    orientationValue = v.value;
   }
 
   // Selecting a link from the library overrides the URL + host set. A link
@@ -216,7 +244,9 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
      signage_enabled = COALESCE(?, signage_enabled), signage_urls = COALESCE(?, signage_urls),
      signage_interval_seconds = COALESCE(?, signage_interval_seconds),
      maintenance_enabled = COALESCE(?, maintenance_enabled),
-     maintenance_message = CASE WHEN ? = 1 THEN ? ELSE maintenance_message END WHERE id = ?`)
+     maintenance_message = CASE WHEN ? = 1 THEN ? ELSE maintenance_message END,
+     payment_mode = COALESCE(?, payment_mode),
+     display_orientation = COALESCE(?, display_orientation) WHERE id = ?`)
     .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
          exitCodeValue,
@@ -231,6 +261,8 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
          maintenanceValues ? maintenanceValues.enabled : null,
          maintenanceValues ? 1 : 0,
          maintenanceValues ? maintenanceValues.message : null,
+         paymentModeValue,
+         orientationValue,
          device.id);
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   logEvent(device.id, userId, 'config_update', null);

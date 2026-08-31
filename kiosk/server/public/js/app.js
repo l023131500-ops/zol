@@ -29,6 +29,34 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// api() always parses JSON — wrong for a generated file the browser should
+// save rather than the console reading as data (KIOSK_BUILD.md §3 Route C's
+// Windows package, and Route D's offline USB package below, which needs a
+// POST body — hence the optional `opts`, merged rather than a second
+// near-identical function). Same auth header, but the response becomes a
+// Blob handed to a throwaway <a download> instead.
+async function downloadFile(path, filename, opts = {}) {
+  const res = await fetch(BASE + '/api' + path, {
+    ...opts,
+    headers: {
+      ...(TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {}),
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'שגיאה בשרת');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = el(`<a href="${url}" download="${esc(filename)}"></a>`);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function toast(msg, ok = true) {
   const t = el(`<div class="toast" style="background:${ok ? '#0b1220' : '#b91c1c'}">${esc(msg)}</div>`);
   $('#toast-root').appendChild(t);
@@ -298,7 +326,10 @@ function mapDevice(d) {
     signageUrls: d.signage_urls || d.signageUrls || '',
     signageIntervalSeconds: d.signage_interval_seconds ?? d.signageIntervalSeconds ?? 15,
     maintenanceEnabled: d.maintenance_enabled === 1 || d.maintenance_enabled === true || d.maintenanceEnabled === true,
-    maintenanceMessage: d.maintenance_message || d.maintenanceMessage || '' };
+    maintenanceMessage: d.maintenance_message || d.maintenanceMessage || '',
+    accessCode: d.access_code || d.accessCode || '',
+    paymentMode: d.payment_mode || d.paymentMode || 'none',
+    displayOrientation: d.display_orientation || d.displayOrientation || 'landscape' };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -351,9 +382,11 @@ function deviceCard(d) {
       <span class="pill ${d.online ? 'on' : 'off'}">${d.online ? 'מחובר' : 'מנותק'}</span>
     </div>
     ${d.maintenanceEnabled ? `<div class="pill off" style="margin-top:4px">🛠 בתחזוקה מרחוק${d.maintenanceMessage ? ' — ' + esc(d.maintenanceMessage) : ''}</div>` : ''}
+    ${d.paymentMode && d.paymentMode !== 'none' ? `<div class="pill on" style="margin-top:4px">💳 ${esc((PAYMENT_MODE_INFO[d.paymentMode] || {}).label || d.paymentMode)}</div>` : ''}
+    ${d.displayOrientation && d.displayOrientation !== 'landscape' ? `<div class="pill on" style="margin-top:4px">↕️ ${esc(ORIENTATION_LABELS[d.displayOrientation] || d.displayOrientation)}</div>` : ''}
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
-      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}</div>
+      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}${d.accessCode ? `<br/>🚪 קוד בחירה: <b>${esc(d.accessCode)}</b>` : ''}</div>
     <div class="actions"></div></div>`);
   const acts = $('.actions', c);
   const mk = (label, fn, cls = 'btn-light') => { const b = el(`<button class="btn ${cls} btn-sm">${label}</button>`); b.onclick = fn; acts.appendChild(b); };
@@ -366,9 +399,41 @@ function deviceCard(d) {
   mk('📸 צילום מסך', () => cmd(d, 'screenshot'));
   if (d.lastScreenshotAt) mk('🖼️ צילום אחרון', () => viewScreenshot(d));
   mk('📋 יומן', () => viewDeviceLog(d));
+  mk('🪟 חבילת Windows', () => downloadFile(`/devices/${d.id}/windows-package`, `kioskfleet-${d.serial}.ps1`).catch((e) => toast(e.message, false)));
+  // KIOSK_BUILD.md §2★ז: the launcher page (public/launcher.html) reads its
+  // code back out of the URL path itself (see js/launcher.js), so the link
+  // this copies is the whole self-sufficient thing a technician needs — no
+  // separate "now type this code in" step.
+  if (d.accessCode) mk('🚪 העתקת קישור בחירה', () => copyLauncherLink(d));
+  mk('🔄 קוד בחירה חדש', () => regenerateAccessCode(d));
   mk('✏️ עריכה', () => editDevice(d));
   mk('🗑️', () => confirmDelete(d), 'btn-danger');
   return c;
+}
+
+// KIOSK_BUILD.md §2★ז — copies the full GET /k/:code URL, not just the bare
+// code: someone forwarding this over WhatsApp/SMS wants a tap-to-open link,
+// not one more thing to retype. location.origin (not BASE alone) so the
+// link is absolute and works from any app it gets pasted into.
+async function copyLauncherLink(d) {
+  const url = `${location.origin}${BASE}/k/${d.accessCode}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('קישור הבחירה הועתק');
+  } catch {
+    // Clipboard API needs a secure context/permission that is not always
+    // available (older WebView, non-HTTPS local dev) — surface the link
+    // itself rather than a silent failure the owner cannot act on.
+    window.prompt('העתיקו את הקישור:', url);
+  }
+}
+async function regenerateAccessCode(d) {
+  if (!confirm('קוד הבחירה הישן יפסיק לעבוד מיד. להנפיק קוד חדש?')) return;
+  try {
+    await api(`/devices/${d.id}/access-code/regenerate`, { method: 'POST' });
+    toast('קוד בחירה חדש הונפק');
+    loadDevices();
+  } catch (e) { toast(e.message, false); }
 }
 
 // ── DEVICE ACTIVITY LOG (KIOSK_BUILD.md §9 "יומן אירועים לכל מכשיר") ────
@@ -383,6 +448,7 @@ const EVENT_LABELS = {
   client_identified: 'זוהה לקוח במכשיר', client_approved: 'לקוח אושר למכשיר', client_revoked: 'אישור לקוח בוטל',
   template_applied: 'תבנית הוחלה על המכשיר',
   snapshot_saved: 'גיבוי מדיניות נשמר', snapshot_restored: 'שוחזר גיבוי מדיניות',
+  launcher_opened: 'קישור הבחירה נפתח (§2★ז)', access_code_regenerated: 'קוד בחירה הונפק מחדש',
 };
 const COMMAND_LABELS = {
   reboot: 'אתחול', reload: 'רענון', set_url: 'החלפת כתובת', screen_on: 'הדלקת מסך', screen_off: 'כיבוי מסך',
@@ -391,6 +457,32 @@ const COMMAND_LABELS = {
 };
 const COMMAND_STATUS_LABELS = { pending: 'ממתין', delivered: 'נשלח', done: 'בוצע', failed: 'נכשל' };
 const fmtTime = (t) => (t ? new Date(t + 'Z').toLocaleString('he-IL') : '—');
+
+// KIOSK_BUILD.md §7 "תשלום ואמצעי קלט (3 אופציות, ללא שמירת מספר כרטיס)" —
+// the server-side PAYMENT_MODE_INFO (src/payment.js) mirrored here for the
+// console UI, same "duplicated client-side label map" shape as
+// EVENT_LABELS/COMMAND_LABELS above (this file has no module import from
+// src/). `none` has no note — nothing to warn about on a device with no
+// payment flow configured.
+const PAYMENT_MODE_INFO = {
+  none: { label: 'לא הוגדר' },
+  manual: { label: 'הקלדה ידנית מלאה בטופס המאובטח של הספק',
+    note: 'הקיוסק ננעל לעמוד/iframe המאובטח של הספק (deep-link) — שום ספרת כרטיס לא עוברת דרך הקוד שלנו.' },
+  card_reader: { label: 'קורא מקליד 16 ספרות + הלקוח משלים תוקף/CVV',
+    note: 'מומלץ לוודא מול ספק הסליקה שאופציה זו מאושרת אצלו לפני שימוש. הקורא מוזין כמקלדת רגילה (HID) לתוך הטופס המאובטח — לא נשמר בקיוסק.' },
+  emv: { label: 'מסופון מוסמך ומצפין (EMV) לכרטיס פיזי',
+    note: 'המסופון מצפין בראש הקריאה ומדבר ישירות עם הסליקה, ומחזיר טוקן+אישור בלבד. ראו docs/payment-he.md ("שיטה B") לדרישות אינטגרציה לפי דגם.' },
+};
+
+// KIOSK_BUILD.md §5 "בחירת אוריינטציה: אורך / רוחב — נכפה על המכשיר" — the
+// server-side ORIENTATION_LABELS (src/orientation.js) mirrored here for the
+// console UI, same "duplicated client-side label map" shape as
+// PAYMENT_MODE_INFO above.
+const ORIENTATION_LABELS = {
+  landscape: 'רוחב (Landscape) — נעול',
+  portrait: 'אורך (Portrait) — נעול',
+  auto: 'לפי סיבוב המכשיר (לא נכפה)',
+};
 
 async function viewDeviceLog(d) {
   const m = modal(`<h3>יומן פעילות — ${esc(d.name)}</h3><p style="color:var(--muted)">טוען…</p>`);
@@ -458,6 +550,9 @@ async function editDevice(d) {
     <div class="field"><label>חזרה אוטומטית לקישור לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="idle" type="number" min="0" value="${d.idleReturnSeconds || 0}" dir="ltr" /></div>
     <div class="field"><label>הגדלת תצוגה (זום): <span id="zoom-val">${d.displayZoomPercent || 100}%</span></label>
       <input id="zoom" type="range" min="50" max="300" step="10" value="${d.displayZoomPercent || 100}" dir="ltr" /></div>
+    <div class="field"><label>אוריינטציה (§5 — נכפה על המכשיר)</label>
+      <select id="orient">${Object.keys(ORIENTATION_LABELS).map((k) =>
+        `<option value="${k}" ${(d.displayOrientation || 'landscape') === k ? 'selected' : ''}>${esc(ORIENTATION_LABELS[k])}</option>`).join('')}</select></div>
     <div class="field"><label><input id="sched-on" type="checkbox" ${d.scheduleEnabled ? 'checked' : ''} /> תזמון שעות פעילות (הדלקת/כיבוי מסך אוטומטי)</label>
       <div id="sched-fields" style="display:${d.scheduleEnabled ? 'flex' : 'none'};gap:8px;margin-top:6px">
         <div style="flex:1"><label style="font-size:12px">שעת פתיחה</label><input id="sched-open" type="time" value="${esc(d.scheduleOpenTime || '09:00')}" dir="ltr" /></div>
@@ -477,6 +572,10 @@ async function editDevice(d) {
         <textarea id="maint-msg" style="width:100%;height:50px;font-size:13px" placeholder="הודעה ללקוח (אופציונלי) — למשל: המכשיר בתחזוקה זמנית, נחזור בקרוב">${esc(d.maintenanceMessage)}</textarea>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:4px">חוסם את המסך הנעול מיד ומציג הודעה במקומו, בלי לנתק את המכשיר או לאבד את הגדרותיו. כבו כדי להחזיר לשירות.</div></div>
+    <div class="field"><label>אמצעי תשלום במכשיר זה (§7 — ללא שמירת מספר כרטיס בשום מצב)</label>
+      <select id="pay-mode">${Object.keys(PAYMENT_MODE_INFO).map((k) =>
+        `<option value="${k}" ${d.paymentMode === k ? 'selected' : ''}>${esc(PAYMENT_MODE_INFO[k].label)}</option>`).join('')}</select>
+      <div id="pay-note" style="font-size:12px;color:var(--muted);margin-top:4px">${esc((PAYMENT_MODE_INFO[d.paymentMode] || {}).note || '')}</div></div>
     <div class="field"><label>קוד תחזוקה מקומי (5 הקשות בפינת המסך)</label>
       <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
       <div style="font-size:12px;color:var(--muted);margin-top:-8px">
@@ -498,6 +597,7 @@ async function editDevice(d) {
   $('#sched-on', m).onchange = (e) => { $('#sched-fields', m).style.display = e.target.checked ? 'flex' : 'none'; };
   $('#sig-on', m).onchange = (e) => { $('#sig-fields', m).style.display = e.target.checked ? 'block' : 'none'; };
   $('#maint-on', m).onchange = (e) => { $('#maint-fields', m).style.display = e.target.checked ? 'block' : 'none'; };
+  $('#pay-mode', m).onchange = (e) => { $('#pay-note', m).textContent = (PAYMENT_MODE_INFO[e.target.value] || {}).note || ''; };
   loadDeviceClients(d, m);
   loadDeviceSnapshots(d, m);
   $('#snap-save', m).onclick = async () => {
@@ -514,9 +614,11 @@ async function editDevice(d) {
     const signageEnabled = $('#sig-on', m).checked;
     const maintenanceEnabled = $('#maint-on', m).checked;
     const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value),
+      displayOrientation: $('#orient', m).value,
       scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value,
       signageEnabled, signageUrls: $('#sig-urls', m).value, signageIntervalSeconds: Number($('#sig-interval', m).value),
-      maintenanceEnabled, maintenanceMessage: $('#maint-msg', m).value };
+      maintenanceEnabled, maintenanceMessage: $('#maint-msg', m).value,
+      paymentMode: $('#pay-mode', m).value };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }
@@ -642,8 +744,84 @@ async function loadEnrollments() {
   const box = $('#e-list'); if (!box) return;
   if (!open.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין קודים פתוחים.</p>'; return; }
   box.innerHTML = '<table><tr><th>קוד</th><th>אתר</th><th>שם</th><th></th></tr>' +
-    open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td><td><button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
+    open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td>
+      <td class="e-actions"><button class="btn btn-sm" data-usb="${e.id}">📦 USB אופליין</button> <button class="btn btn-sm" data-qr="${e.id}">📱 QR (מסלול A)</button> <button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/enrollments/' + b.dataset.del, { method: 'DELETE' }); loadEnrollments(); });
+  box.querySelectorAll('[data-usb]').forEach((b) => b.onclick = () => openUsbPackageForm(b));
+  box.querySelectorAll('[data-qr]').forEach((b) => b.onclick = () => openQrPackageForm(b));
+}
+
+// KIOSK_BUILD.md §3 Route D: unlike every other per-row action here, this
+// one needs an input (the serial `adb devices` prints) before it can do
+// anything — inline in the row rather than a second modal, the same "inline
+// rather than in a second modal" shape this console already uses elsewhere,
+// since a modal-over-a-table loses the row it is acting on from view.
+function openUsbPackageForm(btn) {
+  const enrollmentId = btn.dataset.usb;
+  const td = btn.closest('td');
+  td.innerHTML = `<input class="usb-serial" placeholder="מספר סידורי — adb devices" dir="ltr" style="width:150px" />
+    <button class="btn btn-primary btn-sm" data-usb-go>צור והורד</button>
+    <button class="btn btn-sm" data-usb-cancel>ביטול</button>
+    <div style="color:var(--muted);font-size:11px;margin-top:4px">חבילה זו מנפיקה טוקן למכשיר מיד ומייצרת סקריפט התקנה שרץ בלי אינטרנט כלל.</div>`;
+  const input = td.querySelector('.usb-serial');
+  input.focus();
+  td.querySelector('[data-usb-cancel]').onclick = () => loadEnrollments();
+  const go = td.querySelector('[data-usb-go]');
+  const submit = async () => {
+    const serial = input.value.trim();
+    if (!serial) return toast('נא להזין מספר סידורי', false);
+    go.disabled = true;
+    try {
+      await downloadFile(`/enrollments/${enrollmentId}/usb-package`, `kioskfleet-offline-${serial}.sh`, {
+        method: 'POST', body: JSON.stringify({ serial }),
+      });
+      toast('חבילת ה-USB האופליין הורדה. הריצו אותה עם המכשיר מחובר.');
+      loadEnrollments();
+    } catch (e) { toast(e.message, false); go.disabled = false; }
+  };
+  go.onclick = submit;
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') submit(); });
+}
+
+// KIOSK_BUILD.md §3 Route A + §10-A: unlike USB above, this one does not
+// consume the enrollment code or provision a device row — the code still
+// gets redeemed for real over the network once the scanned device applies
+// it, so re-opening this form after a failed scan just regenerates the same
+// payload rather than needing a fresh code. Wi-Fi fields are optional and
+// collapsed by default: most venues' devices already join Wi-Fi during the
+// stock Android setup wizard, before the QR is ever scanned.
+function openQrPackageForm(btn) {
+  const enrollmentId = btn.dataset.qr;
+  const td = btn.closest('td');
+  td.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <input class="qr-wifi-ssid" placeholder="Wi-Fi SSID (אופציונלי)" style="width:150px" />
+      <input class="qr-wifi-pass" placeholder="סיסמת Wi-Fi" type="password" style="width:130px" />
+      <button class="btn btn-primary btn-sm" data-qr-go>צור QR</button>
+      <button class="btn btn-sm" data-qr-cancel>ביטול</button>
+    </div>
+    <div style="color:var(--muted);font-size:11px;margin-top:4px">מייצר את חבילת ה-JSON למכשיר GMS חדש/מאופס: איפוס יצרן ← הקשה 6× על מסך הברוכים-הבאים ← סריקת QR שנוצר מהטקסט הזה במחולל QR מקומי/אופליין בלבד.</div>
+    <div class="qr-result" style="margin-top:8px"></div>`;
+  td.querySelector('[data-qr-cancel]').onclick = () => loadEnrollments();
+  const go = td.querySelector('[data-qr-go]');
+  const result = td.querySelector('.qr-result');
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      const body = {
+        wifiSsid: td.querySelector('.qr-wifi-ssid').value.trim(),
+        wifiPassword: td.querySelector('.qr-wifi-pass').value,
+      };
+      const res = await api(`/enrollments/${enrollmentId}/qr-package`, { method: 'POST', body: JSON.stringify(body) });
+      result.innerHTML = `<div class="alert alert-warn" style="margin-bottom:6px">${esc(res.warning)}</div>
+        <textarea class="qr-json" readonly dir="ltr" style="width:100%;min-height:140px;font-family:monospace;font-size:11px">${esc(res.payloadJson)}</textarea>
+        <button class="btn btn-sm" data-qr-copy style="margin-top:4px">העתק JSON</button>`;
+      result.querySelector('[data-qr-copy]').onclick = async () => {
+        try { await navigator.clipboard.writeText(res.payloadJson); toast('הועתק'); }
+        catch { result.querySelector('.qr-json').select(); toast('סמנו והעתיקו ידנית (Ctrl+C)', false); }
+      };
+    } catch (e) { toast(e.message, false); }
+    finally { go.disabled = false; }
+  };
 }
 
 // ── LINK LIBRARY ────────────────────────────────────────────────
@@ -809,6 +987,9 @@ async function viewTemplates() {
       <div class="field"><label>חזרה אוטומטית לקישור (שניות; ריק = לא לכלול)</label><input id="tpl-idle" type="number" min="0" placeholder="לא לכלול" dir="ltr" /></div>
       <div class="field"><label><input id="tpl-zoom-on" type="checkbox" /> כלול הגדלת תצוגה (זום): <span id="tpl-zoom-val">100%</span></label>
         <input id="tpl-zoom" type="range" min="50" max="300" step="10" value="100" disabled dir="ltr" /></div>
+      <div class="field"><label><input id="tpl-orient-on" type="checkbox" /> כלול אוריינטציה בתבנית (§5)</label>
+        <select id="tpl-orient" style="display:none;margin-top:6px">${Object.keys(ORIENTATION_LABELS).map((k) =>
+          `<option value="${k}">${esc(ORIENTATION_LABELS[k])}</option>`).join('')}</select></div>
       <div class="field"><label><input id="tpl-sched-on" type="checkbox" /> כלול תזמון שעות פעילות בתבנית</label>
         <div id="tpl-sched-fields" style="display:none;margin-top:6px">
           <label style="display:flex;align-items:center;gap:6px"><input id="tpl-sched-enabled" type="checkbox" checked /> מופעל (לא מסומן = כיבוי התזמון בכל מכשיר שהתבנית תוחל עליו)</label>
@@ -831,15 +1012,20 @@ async function viewTemplates() {
           <textarea id="tpl-maint-msg" style="width:100%;height:50px;font-size:13px;margin-top:6px" placeholder="הודעה ללקוח (אופציונלי)"></textarea>
         </div></div>
       <div class="field"><label>קוד תחזוקה מקומי (אופציונלי; ריק = לא לכלול)</label><input id="tpl-exit" placeholder="לא לכלול" dir="ltr" /></div>
+      <div class="field"><label><input id="tpl-pay-on" type="checkbox" /> כלול אמצעי תשלום בתבנית (§7)</label>
+        <select id="tpl-pay-mode" style="display:none;margin-top:6px">${Object.keys(PAYMENT_MODE_INFO).map((k) =>
+          `<option value="${k}">${esc(PAYMENT_MODE_INFO[k].label)}</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="tpl-create">שמור תבנית</button>
     </div>
     <div class="card" style="max-width:680px"><h3>התבניות שלי</h3><div id="tpl-list">טוען…</div></div>`;
   const tplHl = hostListEditor($('#tpl-hl'), '', '');
   $('#tpl-zoom-on').onchange = (e) => { $('#tpl-zoom').disabled = !e.target.checked; };
   $('#tpl-zoom').oninput = (e) => { $('#tpl-zoom-val').textContent = `${e.target.value}%`; };
+  $('#tpl-orient-on').onchange = (e) => { $('#tpl-orient').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-sched-on').onchange = (e) => { $('#tpl-sched-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-sig-on').onchange = (e) => { $('#tpl-sig-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-maint-on').onchange = (e) => { $('#tpl-maint-fields').style.display = e.target.checked ? 'block' : 'none'; };
+  $('#tpl-pay-on').onchange = (e) => { $('#tpl-pay-mode').style.display = e.target.checked ? 'block' : 'none'; };
 
   $('#tpl-create').onclick = async () => {
     const name = $('#tpl-name').value.trim();
@@ -850,6 +1036,7 @@ async function viewTemplates() {
     const idle = $('#tpl-idle').value; if (idle !== '') body.idleReturnSeconds = Number(idle);
     const exitCode = $('#tpl-exit').value.trim(); if (exitCode) body.exitCode = exitCode;
     if ($('#tpl-zoom-on').checked) body.displayZoomPercent = Number($('#tpl-zoom').value);
+    if ($('#tpl-orient-on').checked) body.displayOrientation = $('#tpl-orient').value;
     if ($('#tpl-sched-on').checked) {
       body.scheduleEnabled = $('#tpl-sched-enabled').checked;
       body.scheduleOpenTime = $('#tpl-sched-open').value;
@@ -864,6 +1051,7 @@ async function viewTemplates() {
       body.maintenanceEnabled = $('#tpl-maint-enabled').checked;
       body.maintenanceMessage = $('#tpl-maint-msg').value;
     }
+    if ($('#tpl-pay-on').checked) body.paymentMode = $('#tpl-pay-mode').value;
     const btn = $('#tpl-create');
     btn.disabled = true;
     try { await api('/templates', { method: 'POST', body: JSON.stringify(body) }); toast('התבנית נשמרה'); viewTemplates(); }
@@ -881,9 +1069,11 @@ function templateSummary(t) {
   if (t.idleReturnSeconds != null) parts.push('חזרה אוטומטית');
   if (t.exitCode != null) parts.push('קוד תחזוקה');
   if (t.displayZoomPercent != null) parts.push(`זום ${t.displayZoomPercent}%`);
+  if (t.displayOrientation != null) parts.push(`אוריינטציה: ${ORIENTATION_LABELS[t.displayOrientation] || t.displayOrientation}`);
   if (t.scheduleEnabled != null) parts.push(t.scheduleEnabled ? `שעות ${t.scheduleOpenTime}–${t.scheduleCloseTime}` : 'כיבוי תזמון');
   if (t.signageEnabled != null) parts.push(t.signageEnabled ? 'מצב תצוגה' : 'כיבוי תצוגה');
   if (t.maintenanceEnabled != null) parts.push(t.maintenanceEnabled ? 'מצב תחזוקה' : 'החזרה לשירות');
+  if (t.paymentMode != null) parts.push(`תשלום: ${(PAYMENT_MODE_INFO[t.paymentMode] || {}).label || t.paymentMode}`);
   return parts.length ? parts.join(' · ') : 'תבנית ריקה';
 }
 

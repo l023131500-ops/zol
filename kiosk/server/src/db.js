@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
+import { generateAccessCode } from './accesscode.js';
 
 // Whether the database survived the last restart is the single most important
 // fact about this deployment, and it is invisible from the outside until a
@@ -258,6 +259,52 @@ ensureColumn('templates', 'maintenance_enabled', 'maintenance_enabled INTEGER');
 ensureColumn('templates', 'maintenance_message', 'maintenance_message TEXT');
 ensureColumn('policy_snapshots', 'maintenance_enabled', 'maintenance_enabled INTEGER');
 ensureColumn('policy_snapshots', 'maintenance_message', 'maintenance_message TEXT');
+// KIOSK_BUILD.md §2★ז "device access-code + unauthenticated launcher page"
+// (GET /k/:code — routes/launcher.js). NULL on every existing row, the
+// honest value: no code existed anywhere in this codebase before this
+// column (see STATUS.md's most recent housekeeping finding). Backfilled
+// below rather than left to a lazy on-read generator, so every device —
+// including ones nobody opens the console for again — has a working code
+// immediately after this migration runs, not only after its next edit.
+ensureColumn('devices', 'access_code', 'access_code TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_access_code ON devices(access_code) WHERE access_code IS NOT NULL');
+// KIOSK_BUILD.md §7 "תשלום ואמצעי קלט (3 אופציות)": which of the three
+// no-PAN-storage input methods this device's payment flow uses, for the
+// console to show the right instructions/warning (src/payment.js). 'none' on
+// every existing row, the honest value — no payment flow was ever recorded
+// before this column existed, same "NULL/0 means never configured"
+// convention exit_code/maintenance_enabled use above. Console-only metadata,
+// like access_code just above it — see payment.js's own comment for why this
+// never rides on commands.js's update_config payload the way schedule_*/
+// signage_*/maintenance_* do.
+ensureColumn('devices', 'payment_mode', "payment_mode TEXT NOT NULL DEFAULT 'none'");
+ensureColumn('templates', 'payment_mode', 'payment_mode TEXT');
+ensureColumn('policy_snapshots', 'payment_mode', 'payment_mode TEXT');
+// KIOSK_BUILD.md §5 "בחירת אוריינטציה: אורך / רוחב — נכפה על המכשיר": until
+// now every device was locked to landscape only, hardcoded in
+// AndroidManifest.xml's static android:screenOrientation on KioskActivity —
+// there was no way to force a specific device to portrait, or leave rotation
+// unforced, from the console. 'landscape' on every existing row is therefore
+// the honest default: it matches exactly what every device already does
+// today, so this migration changes no device's actual behavior on its own
+// (src/orientation.js). Rides commands.js's update_config payload like
+// display_zoom_percent above it — unlike payment_mode/access_code, it does
+// change what the Android agent enforces (KioskActivity.applyOrientation()).
+ensureColumn('devices', 'display_orientation', "display_orientation TEXT NOT NULL DEFAULT 'landscape'");
+ensureColumn('templates', 'display_orientation', 'display_orientation TEXT');
+ensureColumn('policy_snapshots', 'display_orientation', 'display_orientation TEXT');
+
+/** A fresh access code guaranteed not to collide with any row already in the table. */
+export function nextAccessCode() {
+  for (;;) {
+    const code = generateAccessCode();
+    if (!db.prepare('SELECT 1 FROM devices WHERE access_code = ?').get(code)) return code;
+  }
+}
+
+for (const row of db.prepare('SELECT id FROM devices WHERE access_code IS NULL').all()) {
+  db.prepare('UPDATE devices SET access_code = ? WHERE id = ?').run(nextAccessCode(), row.id);
+}
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(
