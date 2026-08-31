@@ -151,8 +151,8 @@ function hostListEditor(mountEl, initialCsv, locked) {
   };
 }
 
-function modal(html) {
-  const bg = el(`<div class="modal-bg"><div class="modal">${html}</div></div>`);
+function modal(html, cls = '') {
+  const bg = el(`<div class="modal-bg"><div class="modal ${cls}">${html}</div></div>`);
   bg.addEventListener('click', (e) => { if (e.target === bg) bg.remove(); });
   $('#modal-root').appendChild(bg);
   return bg;
@@ -591,6 +591,79 @@ function confirmDelete(d) {
   $('#n', m).onclick = () => m.remove();
 }
 
+// ── INSTALL WIZARD (KIOSK_BUILD.md §2★ב) ─────────────────────────
+//
+// Route B (Android generic/DPC via ADB) is the fleet's main route per the
+// locked owner decision in KIOSK_BUILD.md §14. Before this, an enrollment
+// code was shown once with no instructions at all — not even a way to get
+// the APK — so completing §10's route-B steps meant leaving the console for
+// a doc the guide screen only links to, disconnected from the code just
+// created. This ties the two together: a live checklist, scoped to one
+// enrollment, with the exact commands from android/README.md ready to copy.
+//
+// "live checklist" (§2★ב: "לכל שלב תיבת סימון שהלקוח מסמן אם בוצע") means
+// state that survives closing the modal and coming back — localStorage,
+// keyed by the enrollment code (which is unique per row, so two open
+// enrollments never share progress).
+function wizardProgress(code) {
+  try { return JSON.parse(localStorage.getItem('kf_wizard_' + code) || '[]'); } catch { return []; }
+}
+function setWizardStep(code, i, done) {
+  const p = wizardProgress(code);
+  p[i] = done;
+  localStorage.setItem('kf_wizard_' + code, JSON.stringify(p));
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through to legacy path below */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+function wizardSteps(enrollment) {
+  const dl = `${location.origin}${BASE}/downloads/kioskfleet-agent.apk`;
+  return [
+    { title: 'הורדת האפליקציה', body: `<p>הורידו את <a href="${esc(dl)}" target="_blank">kioskfleet-agent.apk</a> למחשב, העבירו למכשיר והתקינו (אשרו "התקנה ממקור לא ידוע" אם מוצג).</p>` },
+    { title: 'הפעלת ניפוי USB במכשיר', body: `<p>הגדרות ← אודות הטלפון ← הקישו 7 פעמים על "מספר build" (פותח מצב מפתח) ← הגדרות ← אפשרויות מפתח ← הפעילו "ניפוי USB".</p>` },
+    { title: 'התקנה דרך המחשב (ADB)', body: `<p>חברו את המכשיר למחשב ואשרו את בקשת ההרשאה שתופיע עליו, ואז הריצו:</p>${cmdBox(`adb install -r kioskfleet-agent.apk`)}` },
+    { title: 'נעילת Device Owner — חד-פעמי', body: `<p>על מכשיר נקי (בלי חשבון Google מחובר) הריצו:</p>${cmdBox(`adb shell dpm set-device-owner com.kioskfleet.agent/.KioskDeviceAdminReceiver`)}<p>בלי זה האפליקציה עדיין נועלת תצוגה, אך כפתורי המערכת אינם חסומים לחלוטין.</p>` },
+    { title: 'הזנת קוד הרישום באפליקציה', body: `<p>פתחו את האפליקציה במכשיר והזינו את הקוד:</p>${cmdBox(enrollment.code)}` },
+    { title: 'אימות', body: `<p>המכשיר יופיע ב"המכשירים שלי" כמחובר תוך דקה. מרגע זה השליטה כולה מרחוק — לפי המספר הסידורי.</p>` },
+  ];
+}
+function cmdBox(text) {
+  return `<div class="cmd-box"><code>${esc(text)}</code><button type="button" class="btn btn-light btn-sm" data-copy="${esc(text)}">העתק</button></div>`;
+}
+function openInstallWizard(enrollment) {
+  const steps = wizardSteps(enrollment);
+  const progress = wizardProgress(enrollment.code);
+  const html = `<h3>אשף התקנה — ${esc(enrollment.name || enrollment.code)}</h3>
+    <p style="color:var(--muted)">קוד רישום: <span class="code-chip">${esc(enrollment.code)}</span></p>
+    ${steps.map((s, i) => `<div class="wizard-step${progress[i] ? ' done' : ''}" data-step="${i}">
+      <input type="checkbox" data-step-check="${i}" ${progress[i] ? 'checked' : ''} />
+      <div><h4>${i + 1}. ${esc(s.title)}</h4>${s.body}</div>
+    </div>`).join('')}
+    <div class="row"><button class="btn btn-light" id="wiz-close">סגירה</button></div>`;
+  const m = modal(html, 'modal-wide');
+  m.querySelectorAll('[data-step-check]').forEach((cb) => {
+    cb.onchange = () => {
+      const i = Number(cb.dataset.stepCheck);
+      setWizardStep(enrollment.code, i, cb.checked);
+      cb.closest('.wizard-step').classList.toggle('done', cb.checked);
+    };
+  });
+  m.querySelectorAll('[data-copy]').forEach((b) => {
+    b.onclick = async () => {
+      const ok = await copyText(b.dataset.copy);
+      toast(ok ? 'הועתק' : 'העתקה נכשלה — סמנו והעתיקו ידנית', ok);
+    };
+  });
+  $('#wiz-close', m).onclick = () => m.remove();
+}
+
 // ── ENROLL ──────────────────────────────────────────────────────
 async function viewEnroll() {
   await loadLinksCache();
@@ -629,10 +702,12 @@ async function createEnrollment() {
     const body = linkId ? { linkId: Number(linkId), name, idleReturnSeconds } : { homeUrl, name, idleReturnSeconds };
     const { enrollment } = await api('/enrollments', { method: 'POST', body: JSON.stringify(body) });
     $('#e-result').innerHTML = `<div class="alert alert-ok" style="margin-top:16px">
-      נוצר קוד רישום! הזינו אותו באפליקציה במכשיר:<br/><br/>
-      <span class="code-chip">${esc(enrollment.code)}</span></div>`;
+      נוצר קוד רישום! <span class="code-chip">${esc(enrollment.code)}</span><br/><br/>
+      <button class="btn btn-primary btn-sm" id="e-wiz">📋 פתחו את אשף ההתקנה</button></div>`;
+    $('#e-wiz').onclick = () => openInstallWizard(enrollment);
     $('#e-url').value = ''; $('#e-name').value = '';
     loadEnrollments();
+    openInstallWizard(enrollment);
   } catch (e) { toast(e.message, false); }
   finally { btn.disabled = false; }
 }
@@ -642,8 +717,9 @@ async function loadEnrollments() {
   const box = $('#e-list'); if (!box) return;
   if (!open.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין קודים פתוחים.</p>'; return; }
   box.innerHTML = '<table><tr><th>קוד</th><th>אתר</th><th>שם</th><th></th></tr>' +
-    open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td><td><button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
+    open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td><td><button class="btn btn-light btn-sm" data-wiz="${e.id}">📋 אשף התקנה</button> <button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/enrollments/' + b.dataset.del, { method: 'DELETE' }); loadEnrollments(); });
+  box.querySelectorAll('[data-wiz]').forEach((b) => b.onclick = () => openInstallWizard(open.find((e) => e.id == b.dataset.wiz)));
 }
 
 // ── LINK LIBRARY ────────────────────────────────────────────────
