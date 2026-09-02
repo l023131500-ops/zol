@@ -29,6 +29,34 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// api() always parses JSON — wrong for a generated file the browser should
+// save rather than the console reading as data (KIOSK_BUILD.md §3 Route C's
+// Windows package, and Route D's offline USB package below, which needs a
+// POST body — hence the optional `opts`, merged rather than a second
+// near-identical function). Same auth header, but the response becomes a
+// Blob handed to a throwaway <a download> instead.
+async function downloadFile(path, filename, opts = {}) {
+  const res = await fetch(BASE + '/api' + path, {
+    ...opts,
+    headers: {
+      ...(TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {}),
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'שגיאה בשרת');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = el(`<a href="${url}" download="${esc(filename)}"></a>`);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function toast(msg, ok = true) {
   const t = el(`<div class="toast" style="background:${ok ? '#0b1220' : '#b91c1c'}">${esc(msg)}</div>`);
   $('#toast-root').appendChild(t);
@@ -366,6 +394,7 @@ function deviceCard(d) {
   mk('📸 צילום מסך', () => cmd(d, 'screenshot'));
   if (d.lastScreenshotAt) mk('🖼️ צילום אחרון', () => viewScreenshot(d));
   mk('📋 יומן', () => viewDeviceLog(d));
+  mk('🪟 חבילת Windows', () => downloadFile(`/devices/${d.id}/windows-package`, `kioskfleet-${d.serial}.ps1`).catch((e) => toast(e.message, false)));
   mk('✏️ עריכה', () => editDevice(d));
   mk('🗑️', () => confirmDelete(d), 'btn-danger');
   return c;
@@ -642,8 +671,42 @@ async function loadEnrollments() {
   const box = $('#e-list'); if (!box) return;
   if (!open.length) { box.innerHTML = '<p style="color:var(--muted);margin:0">אין קודים פתוחים.</p>'; return; }
   box.innerHTML = '<table><tr><th>קוד</th><th>אתר</th><th>שם</th><th></th></tr>' +
-    open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td><td><button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
+    open.map((e) => `<tr><td><span class="code-chip" style="font-size:15px">${esc(e.code)}</span></td><td dir="ltr">${esc(e.home_url)}</td><td>${esc(e.name || '')}</td>
+      <td class="e-actions"><button class="btn btn-sm" data-usb="${e.id}">📦 USB אופליין</button> <button class="btn btn-danger btn-sm" data-del="${e.id}">מחק</button></td></tr>`).join('') + '</table>';
   box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await api('/enrollments/' + b.dataset.del, { method: 'DELETE' }); loadEnrollments(); });
+  box.querySelectorAll('[data-usb]').forEach((b) => b.onclick = () => openUsbPackageForm(b));
+}
+
+// KIOSK_BUILD.md §3 Route D: unlike every other per-row action here, this
+// one needs an input (the serial `adb devices` prints) before it can do
+// anything — inline in the row rather than a second modal, the same "inline
+// rather than in a second modal" shape this console already uses elsewhere,
+// since a modal-over-a-table loses the row it is acting on from view.
+function openUsbPackageForm(btn) {
+  const enrollmentId = btn.dataset.usb;
+  const td = btn.closest('td');
+  td.innerHTML = `<input class="usb-serial" placeholder="מספר סידורי — adb devices" dir="ltr" style="width:150px" />
+    <button class="btn btn-primary btn-sm" data-usb-go>צור והורד</button>
+    <button class="btn btn-sm" data-usb-cancel>ביטול</button>
+    <div style="color:var(--muted);font-size:11px;margin-top:4px">חבילה זו מנפיקה טוקן למכשיר מיד ומייצרת סקריפט התקנה שרץ בלי אינטרנט כלל.</div>`;
+  const input = td.querySelector('.usb-serial');
+  input.focus();
+  td.querySelector('[data-usb-cancel]').onclick = () => loadEnrollments();
+  const go = td.querySelector('[data-usb-go]');
+  const submit = async () => {
+    const serial = input.value.trim();
+    if (!serial) return toast('נא להזין מספר סידורי', false);
+    go.disabled = true;
+    try {
+      await downloadFile(`/enrollments/${enrollmentId}/usb-package`, `kioskfleet-offline-${serial}.sh`, {
+        method: 'POST', body: JSON.stringify({ serial }),
+      });
+      toast('חבילת ה-USB האופליין הורדה. הריצו אותה עם המכשיר מחובר.');
+      loadEnrollments();
+    } catch (e) { toast(e.message, false); go.disabled = false; }
+  };
+  go.onclick = submit;
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') submit(); });
 }
 
 // ── LINK LIBRARY ────────────────────────────────────────────────
