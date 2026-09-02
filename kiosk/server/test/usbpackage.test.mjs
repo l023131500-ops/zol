@@ -40,14 +40,16 @@ test('buildOfflineEnrollPayload matches the shape /api/agent/enroll already retu
   const payload = buildOfflineEnrollPayload({
     deviceToken: 'tok123', name: 'Kiosk 1', homeUrl: 'https://venue.example.com',
     allowedHost: 'venue.example.com,pay.example.com', idleReturnSeconds: 30,
-    adminCode: '1379', displayZoomPercent: 150, approvedClients: [{ code: 'A1' }],
+    adminCode: '1379', displayZoomPercent: 150, displayOrientation: 'portrait',
+    approvedClients: [{ code: 'A1' }],
   });
   assert.deepEqual(payload, {
     deviceToken: 'tok123',
     device: {
       name: 'Kiosk 1', homeUrl: 'https://venue.example.com',
       allowedHost: 'venue.example.com,pay.example.com', idleReturnSeconds: 30,
-      adminCode: '1379', displayZoomPercent: 150, approvedClients: [{ code: 'A1' }],
+      adminCode: '1379', displayZoomPercent: 150, displayOrientation: 'portrait',
+      approvedClients: [{ code: 'A1' }],
     },
   });
 });
@@ -56,7 +58,8 @@ test('buildOfflineEnrollPayload defaults optional fields the same way enroll() d
   const payload = buildOfflineEnrollPayload({ deviceToken: 't', homeUrl: 'https://venue.example.com' });
   assert.deepEqual(payload.device, {
     name: '', homeUrl: 'https://venue.example.com', allowedHost: '',
-    idleReturnSeconds: 0, adminCode: '', displayZoomPercent: 100, approvedClients: [],
+    idleReturnSeconds: 0, adminCode: '', displayZoomPercent: 100, displayOrientation: 'landscape',
+    approvedClients: [],
   });
 });
 
@@ -109,6 +112,16 @@ test('buildUsbOfflineScript embeds the exact offline-enroll JSON payload in a qu
     allowedHost: 'venue.example.com', idleReturnSeconds: 45,
   });
   assert.ok(script.includes(JSON.stringify(payload, null, 2)));
+});
+
+test('buildUsbOfflineScript carries displayOrientation into the embedded JSON payload', () => {
+  const script = buildUsbOfflineScript(baseArgs({ displayOrientation: 'portrait' }));
+  const payload = buildOfflineEnrollPayload({
+    deviceToken: 'TOKEN123', homeUrl: 'https://venue.example.com/kiosk',
+    allowedHost: 'venue.example.com', displayOrientation: 'portrait',
+  });
+  assert.ok(script.includes(JSON.stringify(payload, null, 2)));
+  assert.match(script, /"displayOrientation": "portrait"/);
 });
 
 test('buildUsbOfflineScript strips CR/LF from the device name before it reaches the header comment', () => {

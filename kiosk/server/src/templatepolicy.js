@@ -22,6 +22,7 @@
 import { normalizeHostCsv, parseHosts, normalizeHomeUrl } from './hosts.js';
 import { validateExitCode } from './exitcode.js';
 import { clampZoomPercent } from './display.js';
+import { validateOrientation } from './orientation.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
@@ -88,6 +89,12 @@ export function buildTemplateFields(body) {
       ? null : clampZoomPercent(b.displayZoomPercent);
   }
 
+  if (b.displayOrientation !== undefined) {
+    const v = validateOrientation(b.displayOrientation);
+    if (!v.ok) return { error: v.error };
+    fields.display_orientation = v.value;
+  }
+
   if (b.scheduleEnabled !== undefined || b.scheduleOpenTime !== undefined || b.scheduleCloseTime !== undefined) {
     const enabled = !!b.scheduleEnabled;
     if (enabled) {
@@ -147,6 +154,7 @@ export function policyPatchFromTemplate(row) {
   if (row.idle_return_seconds != null) patch.idleReturnSeconds = row.idle_return_seconds;
   if (row.exit_code != null) patch.exitCode = row.exit_code;
   if (row.display_zoom_percent != null) patch.displayZoomPercent = row.display_zoom_percent;
+  if (row.display_orientation != null) patch.displayOrientation = row.display_orientation;
   if (row.schedule_enabled != null) {
     patch.scheduleEnabled = !!row.schedule_enabled;
     patch.scheduleOpenTime = row.schedule_open_time;
@@ -167,6 +175,7 @@ export function policyPatchFromTemplate(row) {
 
 const TEMPLATE_COLUMNS = [
   'name', 'home_url', 'allowed_host', 'idle_return_seconds', 'exit_code', 'display_zoom_percent',
+  'display_orientation',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
   'maintenance_enabled', 'maintenance_message', 'payment_mode',

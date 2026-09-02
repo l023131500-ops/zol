@@ -301,7 +301,8 @@ router.post('/enrollments/:id/usb-package', requireAuth, (req, res) => {
     script = buildUsbOfflineScript({
       serial, deviceToken: token, deviceName: device.name, homeUrl: device.home_url, allowedHost: device.allowed_host,
       idleReturnSeconds: device.idle_return_seconds, adminCode: device.exit_code || '',
-      displayZoomPercent: device.display_zoom_percent, approvedClients: approvedClientsForDevice(device.id),
+      displayZoomPercent: device.display_zoom_percent, displayOrientation: device.display_orientation,
+      approvedClients: approvedClientsForDevice(device.id),
     });
   } catch (e) {
     // Device row is already provisioned at this point (matching how a
@@ -368,6 +369,7 @@ function publicDevice(d) {
     androidVer: d.android_ver, ip: d.ip, createdAt: d.created_at, exitCode: d.exit_code || '',
     lastScreenshotAt: d.last_screenshot_at || null,
     displayZoomPercent: d.display_zoom_percent ?? 100,
+    displayOrientation: d.display_orientation || 'landscape',
     scheduleEnabled: !!d.schedule_enabled, scheduleOpenTime: d.schedule_open_time || '',
     scheduleCloseTime: d.schedule_close_time || '',
     signageEnabled: !!d.signage_enabled, signageUrls: d.signage_urls || '',

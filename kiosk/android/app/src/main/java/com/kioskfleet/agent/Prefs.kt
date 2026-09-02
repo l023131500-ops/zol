@@ -16,6 +16,10 @@ object Prefs {
     const val ADMIN_CODE   = "admin_code"      // local maintenance code
     const val LAST_URL     = "last_url"        // resume after crash/reboot
     const val DISPLAY_ZOOM = "display_zoom"    // CSS zoom percent applied to the WebView (100 = none)
+    // KIOSK_BUILD.md §5 "בחירת אוריינטציה": 'landscape'|'portrait'|'auto'. Empty
+    // (a device enrolled before this key existed) is read as 'landscape' by
+    // every call site — the manifest's own pre-existing static default.
+    const val DISPLAY_ORIENTATION = "display_orientation"
     const val APPROVED_CLIENTS = "approved_clients"  // JSON array of {code,name,url,allowedHost}, cached for the offline §2★ה selection screen
     const val SIGNAGE_ENABLED  = "signage_enabled"   // "1"/"0" — KIOSK_BUILD.md §9 digital signage
     const val SIGNAGE_URLS     = "signage_urls"      // newline-separated playlist, same shape as the console's textarea

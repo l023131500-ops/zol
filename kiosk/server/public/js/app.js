@@ -335,7 +335,8 @@ function mapDevice(d) {
     // validated server-side (payment.js) already, but had no console field
     // until now.
     paymentMode: d.payment_mode || d.paymentMode || 'none',
-    accessCode: d.access_code || d.accessCode || '' };
+    accessCode: d.access_code || d.accessCode || '',
+    displayOrientation: d.display_orientation || d.displayOrientation || 'landscape' };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -409,6 +410,7 @@ function deviceCard(d) {
     </div>
     ${d.maintenanceEnabled ? `<div class="pill off" style="margin-top:4px">🛠 בתחזוקה מרחוק${d.maintenanceMessage ? ' — ' + esc(d.maintenanceMessage) : ''}</div>` : ''}
     ${hasAppUpdateAvailable(d) ? `<div class="pill on" style="margin-top:4px">⬆️ עדכון אפליקציה זמין (v${esc(LATEST_APP_VERSION)})</div>` : ''}
+    ${d.displayOrientation && d.displayOrientation !== 'landscape' ? `<div class="pill on" style="margin-top:4px">↕️ ${esc(ORIENTATION_LABELS[d.displayOrientation] || d.displayOrientation)}</div>` : ''}
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
       🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}${d.paymentMode && d.paymentMode !== 'none' ? `<br/>💳 ${esc((PAYMENT_MODE_OPTIONS.find((o) => o.value === d.paymentMode) || {}).label || d.paymentMode)}` : ''}${d.accessCode ? `<br/>🚪 קוד בחירה: <b>${esc(d.accessCode)}</b>` : ''}</div>
@@ -484,6 +486,17 @@ const COMMAND_LABELS = {
 const COMMAND_STATUS_LABELS = { pending: 'ממתין', delivered: 'נשלח', done: 'בוצע', failed: 'נכשל' };
 const fmtTime = (t) => (t ? new Date(t + 'Z').toLocaleString('he-IL') : '—');
 
+// KIOSK_BUILD.md §5 "בחירת אוריינטציה: אורך / רוחב — נכפה על המכשיר" — the
+// server-side ORIENTATION_LABELS (src/orientation.js) mirrored here for the
+// console UI, same "duplicated client-side label map" shape as
+// PAYMENT_MODE_OPTIONS above (this file has no module import from src/).
+const ORIENTATION_LABELS = {
+  landscape: 'רוחב (Landscape) — נעול',
+  portrait: 'אורך (Portrait) — נעול',
+  auto: 'לפי סיבוב המכשיר (לא נכפה)',
+};
+
+
 async function viewDeviceLog(d) {
   const m = modal(`<h3>יומן פעילות — ${esc(d.name)}</h3><p style="color:var(--muted)">טוען…</p>`);
   let detail;
@@ -550,6 +563,9 @@ async function editDevice(d) {
     <div class="field"><label>חזרה אוטומטית לקישור לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="idle" type="number" min="0" value="${d.idleReturnSeconds || 0}" dir="ltr" /></div>
     <div class="field"><label>הגדלת תצוגה (זום): <span id="zoom-val">${d.displayZoomPercent || 100}%</span></label>
       <input id="zoom" type="range" min="50" max="300" step="10" value="${d.displayZoomPercent || 100}" dir="ltr" /></div>
+    <div class="field"><label>אוריינטציה (§5 — נכפה על המכשיר)</label>
+      <select id="orient">${Object.keys(ORIENTATION_LABELS).map((k) =>
+        `<option value="${k}" ${(d.displayOrientation || 'landscape') === k ? 'selected' : ''}>${esc(ORIENTATION_LABELS[k])}</option>`).join('')}</select></div>
     <div class="field"><label><input id="sched-on" type="checkbox" ${d.scheduleEnabled ? 'checked' : ''} /> תזמון שעות פעילות (הדלקת/כיבוי מסך אוטומטי)</label>
       <div id="sched-fields" style="display:${d.scheduleEnabled ? 'flex' : 'none'};gap:8px;margin-top:6px">
         <div style="flex:1"><label style="font-size:12px">שעת פתיחה</label><input id="sched-open" type="time" value="${esc(d.scheduleOpenTime || '09:00')}" dir="ltr" /></div>
@@ -614,6 +630,7 @@ async function editDevice(d) {
     const maintenanceEnabled = $('#maint-on', m).checked;
     const payChecked = m.querySelector('input[name="pay"]:checked');
     const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value),
+      displayOrientation: $('#orient', m).value,
       scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value,
       signageEnabled, signageUrls: $('#sig-urls', m).value, signageIntervalSeconds: Number($('#sig-interval', m).value),
       maintenanceEnabled, maintenanceMessage: $('#maint-msg', m).value,
@@ -989,6 +1006,9 @@ async function viewTemplates() {
       <div class="field"><label>חזרה אוטומטית לקישור (שניות; ריק = לא לכלול)</label><input id="tpl-idle" type="number" min="0" placeholder="לא לכלול" dir="ltr" /></div>
       <div class="field"><label><input id="tpl-zoom-on" type="checkbox" /> כלול הגדלת תצוגה (זום): <span id="tpl-zoom-val">100%</span></label>
         <input id="tpl-zoom" type="range" min="50" max="300" step="10" value="100" disabled dir="ltr" /></div>
+      <div class="field"><label><input id="tpl-orient-on" type="checkbox" /> כלול אוריינטציה בתבנית (§5)</label>
+        <select id="tpl-orient" style="display:none;margin-top:6px">${Object.keys(ORIENTATION_LABELS).map((k) =>
+          `<option value="${k}">${esc(ORIENTATION_LABELS[k])}</option>`).join('')}</select></div>
       <div class="field"><label><input id="tpl-sched-on" type="checkbox" /> כלול תזמון שעות פעילות בתבנית</label>
         <div id="tpl-sched-fields" style="display:none;margin-top:6px">
           <label style="display:flex;align-items:center;gap:6px"><input id="tpl-sched-enabled" type="checkbox" checked /> מופעל (לא מסומן = כיבוי התזמון בכל מכשיר שהתבנית תוחל עליו)</label>
@@ -1023,6 +1043,7 @@ async function viewTemplates() {
   const tplHl = hostListEditor($('#tpl-hl'), '', '');
   $('#tpl-zoom-on').onchange = (e) => { $('#tpl-zoom').disabled = !e.target.checked; };
   $('#tpl-zoom').oninput = (e) => { $('#tpl-zoom-val').textContent = `${e.target.value}%`; };
+  $('#tpl-orient-on').onchange = (e) => { $('#tpl-orient').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-sched-on').onchange = (e) => { $('#tpl-sched-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-sig-on').onchange = (e) => { $('#tpl-sig-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-maint-on').onchange = (e) => { $('#tpl-maint-fields').style.display = e.target.checked ? 'block' : 'none'; };
@@ -1037,6 +1058,7 @@ async function viewTemplates() {
     const idle = $('#tpl-idle').value; if (idle !== '') body.idleReturnSeconds = Number(idle);
     const exitCode = $('#tpl-exit').value.trim(); if (exitCode) body.exitCode = exitCode;
     if ($('#tpl-zoom-on').checked) body.displayZoomPercent = Number($('#tpl-zoom').value);
+    if ($('#tpl-orient-on').checked) body.displayOrientation = $('#tpl-orient').value;
     if ($('#tpl-sched-on').checked) {
       body.scheduleEnabled = $('#tpl-sched-enabled').checked;
       body.scheduleOpenTime = $('#tpl-sched-open').value;
@@ -1072,6 +1094,7 @@ function templateSummary(t) {
   if (t.idleReturnSeconds != null) parts.push('חזרה אוטומטית');
   if (t.exitCode != null) parts.push('קוד תחזוקה');
   if (t.displayZoomPercent != null) parts.push(`זום ${t.displayZoomPercent}%`);
+  if (t.displayOrientation != null) parts.push(`אוריינטציה: ${ORIENTATION_LABELS[t.displayOrientation] || t.displayOrientation}`);
   if (t.scheduleEnabled != null) parts.push(t.scheduleEnabled ? `שעות ${t.scheduleOpenTime}–${t.scheduleCloseTime}` : 'כיבוי תזמון');
   if (t.signageEnabled != null) parts.push(t.signageEnabled ? 'מצב תצוגה' : 'כיבוי תצוגה');
   if (t.maintenanceEnabled != null) parts.push(t.maintenanceEnabled ? 'מצב תחזוקה' : 'החזרה לשירות');

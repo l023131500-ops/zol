@@ -28,11 +28,19 @@
 // (KIOSK_BUILD.md §9 "תזמון"), not something a console needs to render —
 // `schedule_enabled`/`schedule_open_time`/`schedule_close_time` alone tell the
 // owner what is configured.
+// `payment_mode` (KIOSK_BUILD.md §7) is not a secret at all — it never rides
+// on update_config (see policy.js's pushConfigUpdate comment), so this is
+// the *only* place it ever reaches a console. Included for the same reason
+// as access_code: the owner needs to see it to use the feature.
+// `display_orientation` (KIOSK_BUILD.md §5) is on the same footing as
+// `display_zoom_percent` right next to it: on-device enforcement, not a
+// secret, and the console needs it to render the current selection in the
+// device-edit form.
 export const CONSOLE_DEVICE_FIELDS = [
   'id', 'owner_id', 'owner_name', 'serial', 'name', 'allowed_host', 'home_url',
   'idle_return_seconds', 'status', 'online', 'last_seen', 'app_version',
   'battery', 'model', 'android_ver', 'ip', 'created_at', 'exit_code',
-  'last_screenshot_at', 'display_zoom_percent',
+  'last_screenshot_at', 'display_zoom_percent', 'display_orientation',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
   'maintenance_enabled', 'maintenance_message', 'payment_mode',

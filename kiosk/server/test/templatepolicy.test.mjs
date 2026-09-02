@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTemplateFields, policyPatchFromTemplate, templateColumns } from '../src/templatepolicy.js';
+import { ORIENTATIONS } from '../src/orientation.js';
 
 test('buildTemplateFields on an empty body changes nothing', () => {
   const { fields, error } = buildTemplateFields({});
@@ -60,6 +61,15 @@ test('buildTemplateFields rejects a weak exitCode the same way exitcode.js does'
 test('buildTemplateFields clamps displayZoomPercent and treats null/"" as unset', () => {
   assert.equal(buildTemplateFields({ displayZoomPercent: 1000 }).fields.display_zoom_percent, 300);
   assert.equal(buildTemplateFields({ displayZoomPercent: null }).fields.display_zoom_percent, null);
+});
+
+test('buildTemplateFields accepts every §5 orientation and rejects an unknown one', () => {
+  for (const o of ORIENTATIONS) {
+    const { fields, error } = buildTemplateFields({ displayOrientation: o });
+    assert.equal(error, undefined);
+    assert.equal(fields.display_orientation, o);
+  }
+  assert.match(buildTemplateFields({ displayOrientation: 'upside-down' }).error, /לא נתמכת/);
 });
 
 test('buildTemplateFields requires a valid open/close pair only when schedule is enabled', () => {
@@ -171,8 +181,22 @@ test('templateColumns is a fixed whitelist, not derived from any request', () =>
   assert.ok(cols.includes('maintenance_enabled'));
   assert.ok(cols.includes('maintenance_message'));
   assert.ok(cols.includes('payment_mode'));
+  assert.ok(cols.includes('display_orientation'));
   assert.equal(new Set(cols).size, cols.length);
 });
+
+test('policyPatchFromTemplate carries displayOrientation only when the template row sets it', () => {
+  const untouched = {
+    home_url: null, allowed_host: null, idle_return_seconds: null, exit_code: null,
+    display_zoom_percent: null, schedule_enabled: null, schedule_open_time: null,
+    schedule_close_time: null, signage_enabled: null, signage_urls: null, signage_interval_seconds: null,
+    display_orientation: null,
+  };
+  assert.deepEqual(policyPatchFromTemplate(untouched), {});
+  const touched = { ...untouched, display_orientation: 'portrait' };
+  assert.deepEqual(policyPatchFromTemplate(touched), { displayOrientation: 'portrait' });
+});
+
 
 test('policyPatchFromTemplate carries maintenance fields when the template sets them', () => {
   const row = {
