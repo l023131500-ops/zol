@@ -227,6 +227,11 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         // — a crash/reboot must not silently put a maintained-off device
         // back in front of customers before the next heartbeat/WS message.
         applyMaintenanceState()
+        // Same "resume the correct state after a crash/reboot" reasoning as
+        // applyMaintenanceState() above — a device that reboots during
+        // closed hours must come back up screen-off on its own, from the
+        // cached schedule alone, not wait for the next connected sweep tick.
+        applyScheduleState()
 
         agent = AgentClient(this, this)
         agent.start()
@@ -435,6 +440,12 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         // branches below, means an operator toggling *only* maintenance still
         // takes effect immediately rather than waiting on an unrelated field.
         applyMaintenanceState()
+        // Same "must land on its own" reasoning as applyMaintenanceState()
+        // above — AgentClient.kt already persisted the fresh Prefs.SCHEDULE_*
+        // values before this callback fires, so an owner turning a schedule
+        // on/off (or editing its hours) takes effect the moment this config
+        // reaches a connected device, not only at the next 60s sweep tick.
+        applyScheduleState()
         // The same gate onSetUrl already applies to a command-driven
         // navigation. A pushed config is server data like any other, and the
         // server-side half of this fix (routes/devices.js) only stops a
@@ -525,6 +536,61 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         }
         maintenanceOverlay?.text = message
         maintenanceOverlay?.visibility = View.VISIBLE
+    }
+
+    /**
+     * "HH:MM" (24h) -> minutes since local midnight, or null for anything else.
+     * Mirrors server/src/schedule.js's parseTimeToMinutes exactly — the same
+     * strict format applyDevicePolicy already validated before this string
+     * was ever stored, re-parsed here defensively rather than trusted blind,
+     * since it now also arrives over a cache (Prefs) a stale/corrupted value
+     * could in principle survive in, the same defense-in-depth BRAND_COLOR_RE
+     * above already applies to a different cached field.
+     */
+    private fun parseTimeToMinutes(raw: String): Int? {
+        val m = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$").find(raw.trim()) ?: return null
+        return m.groupValues[1].toInt() * 60 + m.groupValues[2].toInt()
+    }
+
+    /**
+     * KIOSK_BUILD.md §9 "תזמון: נעילה/פתיחה/כיבוי לפי שעות" — was entirely
+     * reactive: the only thing that ever put a device's screen in the
+     * schedule's off-state was a live screen_on/screen_off command issued by
+     * index.js's 60-second sweep while the device happened to be connected.
+     * A device that rebooted (power cycle, a watchdog-triggered `reboot`, an
+     * OTA update) during closed hours came back up showing the live site to
+     * whoever was standing in front of it — silently open, for however long
+     * it took the next sweep tick to notice and re-issue screen_off, or
+     * indefinitely if the reconnect happened to land exactly at that moment
+     * with no network — the opposite of "אפס באגים גלויים ללקוח" for the one
+     * feature whose whole job is a device with nobody minding it. Server-side,
+     * pushConfigUpdate/heartbeat/enroll now all carry scheduleEnabled/
+     * scheduleOpenTime/scheduleCloseTime for exactly this reason (see
+     * policy.js's own comment on pushConfigUpdate).
+     *
+     * Reuses onScreenOn()/onScreenOff() unchanged — the same blackout a
+     * remote command already produces — rather than a third overlay, so a
+     * device that is *also* explicitly commanded on/off by an operator mid-
+     * window behaves identically either way. Called from onCreate() (resume
+     * into the correct state after a crash/reboot, same reasoning
+     * applyMaintenanceState() already documents) and onConfigUpdated() (a
+     * fresh schedule pushed or toggled while the device is live).
+     */
+    private fun applyScheduleState() = runOnUiThread {
+        val enabled = Prefs.get(this, Prefs.SCHEDULE_ENABLED, "0") == "1"
+        if (!enabled) return@runOnUiThread
+        val openMinutes = parseTimeToMinutes(Prefs.get(this, Prefs.SCHEDULE_OPEN_TIME, ""))
+        val closeMinutes = parseTimeToMinutes(Prefs.get(this, Prefs.SCHEDULE_CLOSE_TIME, ""))
+        if (openMinutes == null || closeMinutes == null) return@runOnUiThread // validated at write time; defensive only
+        val cal = java.util.Calendar.getInstance()
+        val nowMinutes = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+        // Open-inclusive, close-exclusive; overnight (close < open) wraps
+        // across midnight — identical boundary convention to schedule.js's
+        // isWithinOpenWindow/desiredScreenState, verified by that file's own
+        // schedule.test.mjs.
+        val isOpen = if (openMinutes < closeMinutes) nowMinutes in openMinutes until closeMinutes
+                     else nowMinutes >= openMinutes || nowMinutes < closeMinutes
+        if (isOpen) onScreenOn() else onScreenOff()
     }
 
     // ── Hidden maintenance entry / customer selection (KIOSK_BUILD.md §4, §2★ה) ──
