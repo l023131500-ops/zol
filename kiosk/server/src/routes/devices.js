@@ -7,7 +7,9 @@ import { hostAllowed, hostsForUrl, normalizeHomeUrl } from '../hosts.js';
 import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
 import { buildWindowsKioskScript } from '../windowspackage.js';
 import { sanitizeSerial, buildUsbOfflineScript } from '../usbpackage.js';
+import { buildQrProvisioningPayload, DEVICE_ADMIN_COMPONENT_NAME } from '../qrprovision.js';
 import { notifyConsolesOfDevice } from '../hub.js';
+import { config } from '../config.js';
 
 const router = express.Router();
 const codeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
@@ -293,6 +295,51 @@ router.post('/enrollments/:id/usb-package', requireAuth, (req, res) => {
   }
   res.setHeader('Content-Disposition', `attachment; filename="kioskfleet-offline-${serial}.sh"`);
   res.type('text/plain; charset=utf-8').send(script);
+});
+
+// KIOSK_BUILD.md §3 Route A + §10-A: the QR provisioning payload for an
+// existing, unused enrollment code — the same code Route B's manual entry
+// already redeems, just delivered by scanning instead of typing. Unlike
+// usb-package above, no device row is provisioned here and the code is not
+// consumed: a Route A device only reaches the network *during* provisioning
+// (to download the DPC APK), so it enrolls for real the normal online way,
+// through the existing rate-limited /api/agent/enroll, once EnrollActivity
+// applies this bundle — see qrprovision.js's own header for why a
+// short-lived code rides here rather than usb-package's raw deviceToken.
+// JSON (not text/plain like the .ps1/.sh downloads above): this is not a
+// script to run, it is a payload the console shows for copying into an
+// offline/local QR generator — see the security note in its own response.
+router.post('/enrollments/:id/qr-package', requireAuth, (req, res) => {
+  const enr = db.prepare('SELECT * FROM enrollments WHERE id = ?').get(req.params.id);
+  if (!enr || enr.owner_id !== req.user.id) return res.sendStatus(404);
+  if (enr.used) return res.status(409).json({ error: 'קוד רישום כבר נוצל' });
+  if (enr.expires_at && new Date(enr.expires_at) < new Date())
+    return res.status(410).json({ error: 'קוד רישום פג תוקף' });
+
+  let payload;
+  try {
+    payload = buildQrProvisioningPayload({
+      code: enr.code,
+      serverUrl: `${config.publicUrl}${config.basePath}`,
+      apkUrl: config.kioskAgentApkUrl,
+      apkSignatureChecksum: config.kioskAgentApkSignatureChecksum,
+      wifiSsid: req.body?.wifiSsid, wifiPassword: req.body?.wifiPassword, wifiSecurityType: req.body?.wifiSecurityType,
+    });
+  } catch (e) {
+    // Not configured (KIOSK_AGENT_APK_URL/_CHECKSUM missing) or a malformed
+    // enrollment code — either way there is nothing to generate yet, not a
+    // server error.
+    return res.status(501).json({ error: e.message });
+  }
+  res.json({
+    payload,
+    payloadJson: JSON.stringify(payload, null, 2),
+    componentName: DEVICE_ADMIN_COMPONENT_NAME,
+    // Shown by the console next to the payload — this text carries the
+    // owner's own enrollment code, so uploading it to a random online QR
+    // generator hands that code to a third party same as pasting a password.
+    warning: 'אין להדביק טקסט זה במחולל QR מקוון חיצוני — הוא מכיל את קוד הרישום. יש להשתמש במחולל QR מקומי/אופליין בלבד.',
+  });
 });
 
 function publicDevice(d) {

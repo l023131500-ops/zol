@@ -40,6 +40,64 @@ class EnrollActivity : AppCompatActivity() {
         // A Route D script may have pushed our config before this ever ran.
         if (applyOfflineConfigIfPresent()) { goKiosk(); return }
 
+        // KIOSK_BUILD.md §3 Route A + §10-A: KioskDeviceAdminReceiver's
+        // onProfileProvisioningComplete forwards the QR payload's
+        // server/code here as plain intent extras once Device Owner
+        // provisioning finishes — no one typed anything, so there is
+        // nothing to show a keyboard for. Same precondition-then-fallthrough
+        // shape as the Route D check just above: a missing/blank extra just
+        // falls through to the normal manual-entry screen below.
+        val qrServer = intent.getStringExtra(EXTRA_QR_SERVER)?.trim()?.trimEnd('/')
+        val qrCode = intent.getStringExtra(EXTRA_QR_CODE)?.trim()?.uppercase()
+        if (!qrServer.isNullOrEmpty() && qrCode?.length == 6) {
+            runAutoEnroll(qrServer, qrCode)
+            return
+        }
+
+        showManualForm()
+    }
+
+    /**
+     * KIOSK_BUILD.md §3 Route A + §10-A: a QR code is scanned once, before
+     * the installer has any further interaction with the device, so this
+     * screen only ever shows progress/errors — never a form to fill in. On
+     * failure it falls back to [showManualForm] pre-filled with the server
+     * address the QR already supplied (network hiccups are the expected
+     * failure mode here — a stale/reused/expired code, or no network yet —
+     * so the installer only has to retry, not retype the server address
+     * too), the exact code EnrollActivity's normal button click already
+     * calls, so the two paths cannot drift on what "enroll" means.
+     */
+    private fun runAutoEnroll(server: String, code: String) {
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.parseColor("#071a33"))
+        }
+        root.addView(ProgressBar(this))
+        root.addView(TextView(this).apply {
+            text = "רושם את המכשיר…"; setTextColor(Color.WHITE); textSize = 17f
+            gravity = Gravity.CENTER; setPadding(0, pad / 2, 0, 0)
+        })
+        setContentView(root)
+
+        Thread {
+            val result = enroll(server, code)
+            runOnUiThread {
+                if (result == null) {
+                    Prefs.set(this, Prefs.SERVER_URL, server)
+                    goKiosk()
+                } else {
+                    showManualForm(prefillServer = server, errorMessage = result)
+                }
+            }
+        }.start()
+    }
+
+    /** The manual server-address + 6-character-code entry screen. */
+    private fun showManualForm(prefillServer: String? = null, errorMessage: String? = null) {
         val pad = (24 * resources.displayMetrics.density).toInt()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -65,7 +123,7 @@ class EnrollActivity : AppCompatActivity() {
 
         root.addView(label("כתובת שרת הניהול"))
         val serverInput = input("https://panel.kioskfleet.com").apply {
-            setText(Prefs.get(this@EnrollActivity, Prefs.SERVER_URL))
+            setText(prefillServer ?: Prefs.get(this@EnrollActivity, Prefs.SERVER_URL))
         }
         root.addView(serverInput)
 
@@ -77,6 +135,7 @@ class EnrollActivity : AppCompatActivity() {
         root.addView(codeInput)
 
         val status = TextView(this).apply {
+            text = errorMessage ?: ""
             setTextColor(Color.parseColor("#ffd27f")); setPadding(0, pad / 2, 0, 0)
         }
 
@@ -193,5 +252,16 @@ class EnrollActivity : AppCompatActivity() {
         // Must match usbpackage.js's OFFLINE_CONFIG_PATH basename exactly —
         // that generator and this reader are the two ends of the same file.
         private const val OFFLINE_CONFIG_FILENAME = "offline_enroll.json"
+
+        // KIOSK_BUILD.md §3 Route A: plain intent-extra keys
+        // KioskDeviceAdminReceiver.onProfileProvisioningComplete forwards the
+        // QR payload's admin-extras-bundle fields under (server/code, see
+        // qrprovision.js). Not the same strings as the
+        // `android.app.extra.PROVISIONING_*` keys the QR JSON itself
+        // uses — those belong to DevicePolicyManager's provisioning intent,
+        // already consumed by the receiver; these are this app's own,
+        // internal hand-off from receiver to activity.
+        const val EXTRA_QR_SERVER = "com.kioskfleet.agent.extra.QR_SERVER"
+        const val EXTRA_QR_CODE = "com.kioskfleet.agent.extra.QR_CODE"
     }
 }
