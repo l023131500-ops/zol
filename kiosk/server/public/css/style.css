@@ -212,8 +212,18 @@ th { color: var(--muted); font-weight: 600; font-size: 13px; }
 /* Modal */
 .modal-bg { position: fixed; inset: 0; background: rgba(7,20,40,.55); display: grid; place-items: center; z-index: 100; padding: 20px; }
 .modal { background: #fff; border-radius: 18px; padding: 28px; width: 100%; max-width: 460px; max-height: 90vh; overflow: auto; }
+.modal.modal-wide { max-width: 720px; }
 .modal h3 { margin-top: 0; }
 .modal .row { display: flex; gap: 10px; justify-content: flex-start; margin-top: 18px; }
+.wizard-step { display: flex; gap: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.wizard-step input[type="checkbox"] { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.wizard-step h4 { margin: 0 0 4px; font-size: 15px; }
+.wizard-step p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.wizard-step.done { opacity: .6; }
+.wizard-step.done h4 { text-decoration: line-through; }
+.cmd-box { display: flex; align-items: center; gap: 8px; background: #0b1220; color: #d7e3ff; border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 12.5px; direction: ltr; text-align: left; overflow-x: auto; }
+.cmd-box code { flex: 1; white-space: pre; }
+.cmd-box button { flex: none; }
 .hidden { display: none !important; }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 13px 22px; border-radius: 12px; z-index: 200; box-shadow: var(--shadow); }
 

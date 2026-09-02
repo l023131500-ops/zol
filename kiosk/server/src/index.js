@@ -147,6 +147,15 @@ site.use(express.static(config.publicDir, { extensions: ['html'] }));
 const docsDir = path.resolve(config.root, '../docs');
 if (fs.existsSync(docsDir)) site.use('/docs', express.static(docsDir));
 
+// Serve built release artifacts (the signed Android agent APK), if present —
+// same conditional-mount shape as docsDir above: whoever has the Android
+// toolchain drops `kioskfleet-agent.apk` into ../releases after a build, and
+// it is reachable at /downloads without any server change or redeploy. Until
+// that file exists this 404s like any other missing static asset — the
+// install wizard's download step degrades to that, not to a broken feature.
+const releasesDir = path.resolve(config.root, '../releases');
+if (fs.existsSync(releasesDir)) site.use('/downloads', express.static(releasesDir));
+
 // SPA-ish fallback for the console.
 site.get('/console', (req, res) => res.sendFile('console.html', { root: config.publicDir }));
 
