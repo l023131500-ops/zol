@@ -122,6 +122,13 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       // rather than waiting for the next sweep tick in index.js.
       scheduleEnabled: !!device.schedule_enabled, scheduleOpenTime: device.schedule_open_time || '',
       scheduleCloseTime: device.schedule_close_time || '',
+      // KIOSK_BUILD.md §4: same "must land on its own" reasoning as
+      // adminCode above — a device's very first read of its policy is this
+      // enroll response, not a later update_config, so a custom exit-gesture
+      // set before this device was ever enrolled must already be here.
+      exitGestureTaps: device.exit_gesture_taps ?? 5,
+      exitGestureCorner: device.exit_gesture_corner || 'tl',
+      exitGestureHoldMs: device.exit_gesture_hold_ms ?? 0,
     },
   });
 });
@@ -192,6 +199,9 @@ router.post('/heartbeat', (req, res) => {
       // work out its own current screen state from this alone.
       scheduleEnabled: !!fresh.schedule_enabled, scheduleOpenTime: fresh.schedule_open_time || '',
       scheduleCloseTime: fresh.schedule_close_time || '',
+      exitGestureTaps: fresh.exit_gesture_taps ?? 5,
+      exitGestureCorner: fresh.exit_gesture_corner || 'tl',
+      exitGestureHoldMs: fresh.exit_gesture_hold_ms ?? 0,
     },
     commands,
   });

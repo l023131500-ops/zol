@@ -293,6 +293,26 @@ db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_access_code ON devices(ac
 ensureColumn('devices', 'display_orientation', "display_orientation TEXT NOT NULL DEFAULT 'landscape'");
 ensureColumn('templates', 'display_orientation', 'display_orientation TEXT');
 ensureColumn('policy_snapshots', 'display_orientation', 'display_orientation TEXT');
+// KIOSK_BUILD.md §4 "מחוֹת יציאה מדורגות... הכל ניתן להגדרה בלוח (כמה
+// הקשות, איזו פינה, אורך החזקה, קודים)": until now only exit_code (the
+// codes half of that sentence) was configurable — the tap-count/corner/hold
+// half was hardcoded in KioskActivity.kt with no device column at all. The
+// defaults below (5 / 'tl' / 0) match exactly what every device already
+// does today (see gesturesettings.js), so this migration changes no
+// device's actual behavior on its own — same "honest default" reasoning
+// display_orientation's own migration comment gives. Rides commands.js's
+// update_config payload like display_zoom_percent/display_orientation above
+// it, not payment_mode/access_code — it changes what the Android agent
+// enforces (KioskActivity's corner-tap gesture).
+ensureColumn('devices', 'exit_gesture_taps', 'exit_gesture_taps INTEGER NOT NULL DEFAULT 5');
+ensureColumn('devices', 'exit_gesture_corner', "exit_gesture_corner TEXT NOT NULL DEFAULT 'tl'");
+ensureColumn('devices', 'exit_gesture_hold_ms', 'exit_gesture_hold_ms INTEGER NOT NULL DEFAULT 0');
+ensureColumn('templates', 'exit_gesture_taps', 'exit_gesture_taps INTEGER');
+ensureColumn('templates', 'exit_gesture_corner', 'exit_gesture_corner TEXT');
+ensureColumn('templates', 'exit_gesture_hold_ms', 'exit_gesture_hold_ms INTEGER');
+ensureColumn('policy_snapshots', 'exit_gesture_taps', 'exit_gesture_taps INTEGER');
+ensureColumn('policy_snapshots', 'exit_gesture_corner', 'exit_gesture_corner TEXT');
+ensureColumn('policy_snapshots', 'exit_gesture_hold_ms', 'exit_gesture_hold_ms INTEGER');
 
 /** A fresh access code guaranteed not to collide with any row already in the table. */
 export function nextAccessCode() {

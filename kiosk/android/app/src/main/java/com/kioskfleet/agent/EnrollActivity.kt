@@ -212,6 +212,13 @@ class EnrollActivity : AppCompatActivity() {
         Prefs.set(this, Prefs.DISPLAY_ZOOM, dev.optInt("displayZoomPercent", 100).toString())
         Prefs.set(this, Prefs.DISPLAY_ORIENTATION, dev.optString("displayOrientation", "landscape"))
         Prefs.set(this, Prefs.APPROVED_CLIENTS, dev.optJSONArray("approvedClients")?.toString() ?: "[]")
+        // KIOSK_BUILD.md §4: same "one place, both entry points" reasoning as
+        // every field above — a Route D (offline USB) device never phones
+        // home before it locks, so its gesture settings must already be in
+        // this one envelope, same as adminCode/displayZoomPercent.
+        Prefs.set(this, Prefs.EXIT_GESTURE_TAPS, dev.optInt("exitGestureTaps", 5).toString())
+        Prefs.set(this, Prefs.EXIT_GESTURE_CORNER, dev.optString("exitGestureCorner", "tl"))
+        Prefs.set(this, Prefs.EXIT_GESTURE_HOLD_MS, dev.optInt("exitGestureHoldMs", 0).toString())
     }
 
     /**

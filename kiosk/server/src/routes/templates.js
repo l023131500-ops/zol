@@ -28,6 +28,9 @@ function publicTemplate(t) {
     maintenanceEnabled: t.maintenance_enabled == null ? null : !!t.maintenance_enabled,
     maintenanceMessage: t.maintenance_message,
     paymentMode: t.payment_mode,
+    exitGestureTaps: t.exit_gesture_taps,
+    exitGestureCorner: t.exit_gesture_corner,
+    exitGestureHoldMs: t.exit_gesture_hold_ms,
   };
 }
 

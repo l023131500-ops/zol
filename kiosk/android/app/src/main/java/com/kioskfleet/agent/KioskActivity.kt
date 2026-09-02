@@ -48,6 +48,14 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         // message (server-side: maintenance.js's validateMaintenanceMessage
         // treats blank as "no custom message", not an error).
         const val DEFAULT_MAINTENANCE_MESSAGE = "המכשיר בתחזוקה זמנית — נחזור בקרוב"
+        // KIOSK_BUILD.md §4: server-side clamp range (gesturesettings.js),
+        // mirrored here as a defensive clamp on whatever a device's own
+        // cached Prefs value holds — the same "clamp again on-device"
+        // reasoning applyZoom()'s own comment gives for a config that could
+        // predate a server-side clamp landing.
+        const val MIN_GESTURE_TAPS = 3
+        const val MAX_GESTURE_TAPS = 10
+        const val MAX_GESTURE_HOLD_MS = 5000L
     }
 
     private lateinit var webView: WebView
@@ -63,6 +71,13 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     // on each other's state.
     private var maintenanceOverlay: TextView? = null
     private var cornerTapCount = 0
+    // KIOSK_BUILD.md §4: the final required tap's hold-to-confirm timer —
+    // scheduled once cornerTapCount reaches the configured threshold (only
+    // when a hold is configured at all), cancelled on ACTION_UP/CANCEL if
+    // the customer lifts before it fires. Separate from tapResetRunnable
+    // (which resets the *count* after inactivity, not a specific pending
+    // hold), since the two must not cancel each other.
+    private var holdConfirmRunnable: Runnable? = null
     private var isAdminUnlocked = false
     private var allowedHosts = ""       // comma-separated — the *currently active* scope (device baseline, or a selected client's)
     private var deviceAllowedHosts = "" // comma-separated — the device's own baseline scope (home_url + extras), independent of any client selection
@@ -627,31 +642,104 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     }
 
     // ── Hidden maintenance entry / customer selection (KIOSK_BUILD.md §4, §2★ה) ──
+
+    /**
+     * KIOSK_BUILD.md §4 "כמה הקשות": read fresh from Prefs at gesture-check
+     * time rather than cached — same "read-at-use" shape ADMIN_CODE already
+     * uses (showAdminDialog reads it fresh on every open), so a config
+     * pushed mid-session (which never fires onConfigUpdated for this group —
+     * see AgentClient.kt's own comment) is picked up on the very next tap,
+     * not only after some unrelated field also happens to change. Clamped
+     * again on-device — same reasoning applyZoom()'s own comment gives —
+     * since this could be a value cached before a server-side clamp landed.
+     */
+    private fun gestureTapsRequired(): Int =
+        (Prefs.get(this, Prefs.EXIT_GESTURE_TAPS).toIntOrNull() ?: CORNER_TAPS_REQUIRED)
+            .coerceIn(MIN_GESTURE_TAPS, MAX_GESTURE_TAPS)
+
+    private fun gestureHoldMs(): Long =
+        (Prefs.get(this, Prefs.EXIT_GESTURE_HOLD_MS).toLongOrNull() ?: 0L).coerceIn(0L, MAX_GESTURE_HOLD_MS)
+
+    /** One of "tl"/"tr"/"bl"/"br"; an unrecognised/empty cached value falls back to "tl", matching every device's pre-existing behavior. */
+    private fun gestureCorner(): String {
+        val v = Prefs.get(this, Prefs.EXIT_GESTURE_CORNER)
+        return if (v == "tr" || v == "bl" || v == "br") v else "tl"
+    }
+
+    /**
+     * Whether (x, y) falls inside the configured corner's CORNER_SIZE_PX
+     * square, generalised from the original top-left-only check to all four
+     * screen corners. viewWidth/viewHeight come from the touched view itself
+     * (not a cached display size), so this stays correct across a runtime
+     * orientation change without any extra bookkeeping.
+     */
+    private fun isInGestureCorner(x: Float, y: Float, viewWidth: Int, viewHeight: Int): Boolean {
+        return when (gestureCorner()) {
+            "tr" -> x >= viewWidth - CORNER_SIZE_PX && y <= CORNER_SIZE_PX
+            "bl" -> x <= CORNER_SIZE_PX && y >= viewHeight - CORNER_SIZE_PX
+            "br" -> x >= viewWidth - CORNER_SIZE_PX && y >= viewHeight - CORNER_SIZE_PX
+            else -> x <= CORNER_SIZE_PX && y <= CORNER_SIZE_PX // "tl", the pre-existing default
+        }
+    }
+
     private fun setupTouchInterceptor() {
-        webView.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) {
-                if (isSignageActive) {
-                    // The first touch on rotating signage only ever exits back
-                    // to the interactive kiosk — it does not count toward the
-                    // corner-tap gesture below, the same "no rights beyond what
-                    // was already granted" default §2★ה's own selection dialog
-                    // documents for switchToHome()/switchToClient().
-                    stopSignage()
-                    switchToHome()
-                } else {
-                    resetIdleTimer()  // any interaction keeps the customer's session alive
-                    if (event.x <= CORNER_SIZE_PX && event.y <= CORNER_SIZE_PX) handleCornerTap()
+        webView.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    if (isSignageActive) {
+                        // The first touch on rotating signage only ever exits back
+                        // to the interactive kiosk — it does not count toward the
+                        // corner-tap gesture below, the same "no rights beyond what
+                        // was already granted" default §2★ה's own selection dialog
+                        // documents for switchToHome()/switchToClient().
+                        stopSignage()
+                        switchToHome()
+                    } else {
+                        resetIdleTimer()  // any interaction keeps the customer's session alive
+                        if (isInGestureCorner(event.x, event.y, view.width, view.height)) handleCornerTap()
+                    }
                 }
+                // Lifting (or the system cancelling) a touch fails an in-progress
+                // hold — the final tap must stay pressed for the configured
+                // duration, not be released and re-pressed. A no-op when no hold
+                // is currently scheduled (every ordinary tap's own release).
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> cancelPendingHold()
             }
             false
         }
     }
+
+    private fun cancelPendingHold() {
+        holdConfirmRunnable?.let { mainHandler.removeCallbacks(it) }
+        holdConfirmRunnable = null
+    }
+
+    /**
+     * KIOSK_BUILD.md §4 "הקשה מורכבת (למשל 5 הקשות בפינה + החזקה)". With
+     * holdMs == 0 (the pre-existing default for every device) this behaves
+     * exactly as before: the required tap count alone opens the selection
+     * dialog immediately, no hold needed. With holdMs > 0, reaching the
+     * required count only *starts* the hold — the dialog opens after that
+     * same touch stays pressed for holdMs; releasing early
+     * (cancelPendingHold(), above) fails it and the customer must redo the
+     * full tap sequence, the same "reset on any anomaly" philosophy
+     * tapResetRunnable's own 3s window already applies to the count itself.
+     */
     private fun handleCornerTap() {
         cornerTapCount++
         tapResetRunnable?.let { mainHandler.removeCallbacks(it) }
         tapResetRunnable = Runnable { cornerTapCount = 0 }
         mainHandler.postDelayed(tapResetRunnable!!, TAP_RESET_DELAY_MS)
-        if (cornerTapCount >= CORNER_TAPS_REQUIRED) { cornerTapCount = 0; showSelectionDialog() }
+        if (cornerTapCount >= gestureTapsRequired()) {
+            cornerTapCount = 0
+            val holdMs = gestureHoldMs()
+            if (holdMs <= 0) {
+                showSelectionDialog()
+            } else {
+                holdConfirmRunnable = Runnable { showSelectionDialog() }
+                mainHandler.postDelayed(holdConfirmRunnable!!, holdMs)
+            }
+        }
     }
 
     /**

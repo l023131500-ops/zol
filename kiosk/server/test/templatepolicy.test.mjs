@@ -10,6 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTemplateFields, policyPatchFromTemplate, templateColumns } from '../src/templatepolicy.js';
 import { ORIENTATIONS } from '../src/orientation.js';
+import { GESTURE_CORNERS } from '../src/gesturesettings.js';
 
 test('buildTemplateFields on an empty body changes nothing', () => {
   const { fields, error } = buildTemplateFields({});
@@ -145,6 +146,38 @@ test('buildTemplateFields rejects an unsupported paymentMode', () => {
 
 test('buildTemplateFields leaves payment_mode out entirely when untouched', () => {
   assert.ok(!('payment_mode' in buildTemplateFields({}).fields));
+});
+
+test('buildTemplateFields clamps exitGestureTaps/HoldMs and treats null/"" as unset', () => {
+  assert.equal(buildTemplateFields({ exitGestureTaps: 1 }).fields.exit_gesture_taps, 3);
+  assert.equal(buildTemplateFields({ exitGestureTaps: 999 }).fields.exit_gesture_taps, 10);
+  assert.equal(buildTemplateFields({ exitGestureTaps: null }).fields.exit_gesture_taps, null);
+  assert.equal(buildTemplateFields({ exitGestureTaps: '' }).fields.exit_gesture_taps, null);
+  assert.equal(buildTemplateFields({ exitGestureHoldMs: 99999 }).fields.exit_gesture_hold_ms, 5000);
+  assert.equal(buildTemplateFields({ exitGestureHoldMs: null }).fields.exit_gesture_hold_ms, null);
+});
+
+test('buildTemplateFields accepts every §4 gesture corner and rejects an unknown one', () => {
+  for (const c of GESTURE_CORNERS) {
+    const { fields, error } = buildTemplateFields({ exitGestureCorner: c });
+    assert.equal(error, undefined);
+    assert.equal(fields.exit_gesture_corner, c);
+  }
+  assert.match(buildTemplateFields({ exitGestureCorner: 'center' }).error, /לא נתמכת/);
+});
+
+test('policyPatchFromTemplate carries exit-gesture fields only when the template row sets them', () => {
+  const untouched = {
+    home_url: null, allowed_host: null, idle_return_seconds: null, exit_code: null,
+    display_zoom_percent: null, schedule_enabled: null, schedule_open_time: null,
+    schedule_close_time: null, signage_enabled: null, signage_urls: null, signage_interval_seconds: null,
+    exit_gesture_taps: null, exit_gesture_corner: null, exit_gesture_hold_ms: null,
+  };
+  assert.deepEqual(policyPatchFromTemplate(untouched), {});
+  const touched = { ...untouched, exit_gesture_taps: 7, exit_gesture_corner: 'br', exit_gesture_hold_ms: 1500 };
+  assert.deepEqual(policyPatchFromTemplate(touched), {
+    exitGestureTaps: 7, exitGestureCorner: 'br', exitGestureHoldMs: 1500,
+  });
 });
 
 test('policyPatchFromTemplate includes only the columns a template row actually sets', () => {

@@ -31,6 +31,7 @@ test('snapshotFieldsFromDevice extracts exactly the policy subset, nothing else'
     signage_enabled: 0, signage_urls: null, signage_interval_seconds: 15,
     maintenance_enabled: 1, maintenance_message: 'בתחזוקה עד 14:00',
     payment_mode: 'reader_prefill',
+    exit_gesture_taps: 7, exit_gesture_corner: 'br', exit_gesture_hold_ms: 1500,
   };
   const fields = snapshotFieldsFromDevice(device);
   assert.deepEqual(Object.keys(fields).sort(), [...SNAPSHOT_COLUMNS].sort());
@@ -41,6 +42,9 @@ test('snapshotFieldsFromDevice extracts exactly the policy subset, nothing else'
   assert.equal(fields.maintenance_enabled, 1);
   assert.equal(fields.maintenance_message, 'בתחזוקה עד 14:00');
   assert.equal(fields.payment_mode, 'reader_prefill');
+  assert.equal(fields.exit_gesture_taps, 7);
+  assert.equal(fields.exit_gesture_corner, 'br');
+  assert.equal(fields.exit_gesture_hold_ms, 1500);
   assert.equal('name' in fields, false);
   assert.equal('device_token' in fields, false);
 });
@@ -52,6 +56,9 @@ test('policyFieldsPresent is true when any policy-affecting key is present', () 
   assert.equal(policyFieldsPresent({ maintenanceEnabled: true }), true);
   assert.equal(policyFieldsPresent({ paymentMode: 'manual' }), true);
   assert.equal(policyFieldsPresent({ displayOrientation: 'portrait' }), true);
+  assert.equal(policyFieldsPresent({ exitGestureTaps: 7 }), true);
+  assert.equal(policyFieldsPresent({ exitGestureCorner: 'br' }), true);
+  assert.equal(policyFieldsPresent({ exitGestureHoldMs: 1500 }), true);
 });
 
 test('policyFieldsPresent is false for a name-only or empty body', () => {
@@ -71,6 +78,7 @@ test('patchFromSnapshot restores every captured field, mirroring a template row 
     signage_enabled: 1, signage_urls: 'https://b.example/promo', signage_interval_seconds: 20,
     maintenance_enabled: 1, maintenance_message: 'בתחזוקה',
     payment_mode: 'manual',
+    exit_gesture_taps: 8, exit_gesture_corner: 'bl', exit_gesture_hold_ms: 2000,
   };
   const patch = patchFromSnapshot(snapshotRow);
   assert.equal(patch.homeUrl, 'https://b.example/');
@@ -86,6 +94,9 @@ test('patchFromSnapshot restores every captured field, mirroring a template row 
   assert.equal(patch.maintenanceEnabled, true);
   assert.equal(patch.maintenanceMessage, 'בתחזוקה');
   assert.equal(patch.paymentMode, 'manual');
+  assert.equal(patch.exitGestureTaps, 8);
+  assert.equal(patch.exitGestureCorner, 'bl');
+  assert.equal(patch.exitGestureHoldMs, 2000);
 });
 
 test('patchFromSnapshot clears exit_code on restore when the snapshot captured "unset" (NULL) — the gap templatepolicy.js\'s row mapper would miss', () => {

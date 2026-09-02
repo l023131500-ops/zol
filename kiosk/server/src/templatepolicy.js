@@ -27,6 +27,7 @@ import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
 import { validatePaymentMode } from './payment.js';
+import { clampGestureTaps, validateGestureCorner, clampGestureHoldMs } from './gesturesettings.js';
 
 /**
  * Validate + normalize whatever subset of template fields is present in
@@ -136,6 +137,22 @@ export function buildTemplateFields(body) {
     fields.payment_mode = v.value; // always "changed" here since b.paymentMode is defined
   }
 
+  if (b.exitGestureTaps !== undefined) {
+    fields.exit_gesture_taps = b.exitGestureTaps === null || b.exitGestureTaps === ''
+      ? null : clampGestureTaps(b.exitGestureTaps);
+  }
+
+  if (b.exitGestureCorner !== undefined) {
+    const v = validateGestureCorner(b.exitGestureCorner);
+    if (!v.ok) return { error: v.error };
+    fields.exit_gesture_corner = v.value;
+  }
+
+  if (b.exitGestureHoldMs !== undefined) {
+    fields.exit_gesture_hold_ms = b.exitGestureHoldMs === null || b.exitGestureHoldMs === ''
+      ? null : clampGestureHoldMs(b.exitGestureHoldMs);
+  }
+
   return { fields };
 }
 
@@ -170,6 +187,9 @@ export function policyPatchFromTemplate(row) {
     patch.maintenanceMessage = row.maintenance_message;
   }
   if (row.payment_mode != null) patch.paymentMode = row.payment_mode;
+  if (row.exit_gesture_taps != null) patch.exitGestureTaps = row.exit_gesture_taps;
+  if (row.exit_gesture_corner != null) patch.exitGestureCorner = row.exit_gesture_corner;
+  if (row.exit_gesture_hold_ms != null) patch.exitGestureHoldMs = row.exit_gesture_hold_ms;
   return patch;
 }
 
@@ -179,6 +199,7 @@ const TEMPLATE_COLUMNS = [
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
   'maintenance_enabled', 'maintenance_message', 'payment_mode',
+  'exit_gesture_taps', 'exit_gesture_corner', 'exit_gesture_hold_ms',
 ];
 
 /** Whitelist used to build a dynamic SQL SET clause — never derived from request input. */
