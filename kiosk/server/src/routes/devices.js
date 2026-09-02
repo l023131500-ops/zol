@@ -309,6 +309,7 @@ function publicDevice(d) {
     signageEnabled: !!d.signage_enabled, signageUrls: d.signage_urls || '',
     signageIntervalSeconds: d.signage_interval_seconds ?? 15,
     maintenanceEnabled: !!d.maintenance_enabled, maintenanceMessage: d.maintenance_message || '',
+    paymentMode: d.payment_mode || 'none',
   };
 }
 

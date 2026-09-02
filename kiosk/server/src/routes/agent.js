@@ -109,6 +109,7 @@ router.post('/enroll', enrollLimiter, (req, res) => {
       // enrolls it (a technician prepping a unit that will not go live
       // yet), and enrollment is the first response this device ever reads.
       maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
+      paymentMode: device.payment_mode || 'none',
     },
   });
 });
@@ -170,6 +171,7 @@ router.post('/heartbeat', (req, res) => {
       signageEnabled: !!fresh.signage_enabled, signageUrls: fresh.signage_urls || '',
       signageIntervalSeconds: fresh.signage_interval_seconds,
       maintenanceEnabled: !!fresh.maintenance_enabled, maintenanceMessage: fresh.maintenance_message || '',
+      paymentMode: fresh.payment_mode || 'none',
     },
     commands,
   });

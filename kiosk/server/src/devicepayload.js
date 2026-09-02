@@ -35,7 +35,7 @@ export const CONSOLE_DEVICE_FIELDS = [
   'last_screenshot_at', 'display_zoom_percent',
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
-  'maintenance_enabled', 'maintenance_message',
+  'maintenance_enabled', 'maintenance_message', 'payment_mode',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */

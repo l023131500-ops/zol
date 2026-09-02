@@ -326,7 +326,11 @@ function mapDevice(d) {
     signageUrls: d.signage_urls || d.signageUrls || '',
     signageIntervalSeconds: d.signage_interval_seconds ?? d.signageIntervalSeconds ?? 15,
     maintenanceEnabled: d.maintenance_enabled === 1 || d.maintenance_enabled === true || d.maintenanceEnabled === true,
-    maintenanceMessage: d.maintenance_message || d.maintenanceMessage || '' };
+    maintenanceMessage: d.maintenance_message || d.maintenanceMessage || '',
+    // §7 "תשלום ואמצעי קלט (3 אופציות, ללא שמירת מספר כרטיס)": fully
+    // validated server-side (payment.js) already, but had no console field
+    // until now.
+    paymentMode: d.payment_mode || d.paymentMode || 'none' };
 }
 
 // ── routing ─────────────────────────────────────────────────────
@@ -343,6 +347,19 @@ function route(view) {
   [...$('#menu').children].forEach((a) => a.classList.toggle('active', a.dataset.view === view));
   ({ devices: viewDevices, links: viewLinks, clients: viewClients, templates: viewTemplates, alerts: viewAlerts, analytics: viewAnalytics, enroll: viewEnroll, guide: viewGuide, admin: viewAdmin, settings: viewSettings }[view] || viewDevices)();
 }
+
+// KIOSK_BUILD.md §7 "תשלום ואמצעי קלט (3 אופציות, ללא שמירת מספר כרטיס)" —
+// the 3 owner-approved modes plus "none", in the exact order + wording the
+// spec locks. Deliberately no 4th option here for a keyboard-emulating
+// magstripe reader that types the raw card number into a field: that shape
+// is banned by the spec (unencrypted PAN, full PCI scope), matching the
+// server-side allow-list in payment.js.
+const PAYMENT_MODE_OPTIONS = [
+  { value: 'none', label: 'אין תשלום בקיוסק', hint: 'המכשיר אינו משמש לתשלום.' },
+  { value: 'manual', label: 'הקלדה ידנית מלאה', hint: 'הלקוח מקליד את כל פרטי הכרטיס בשדה/iframe המאובטח של ספק הסליקה. שום מספר כרטיס לא נשמר באתר או בקיוסק.' },
+  { value: 'reader_prefill', label: 'קורא — 16 ספרות בלבד', hint: 'קורא מזין רק את 16 הספרות לשדה; הלקוח משלים ידנית תוקף ו-CVV. חוסך הקלדה בלבד, שום מספר לא נשמר. מומלץ לוודא מול ספק הסליקה שהאופציה מאושרת.' },
+  { value: 'emv_terminal', label: 'מסופון EMV מוסמך ומצפין', hint: 'מסופון פיזי מצפין בראש הקריאה ומדבר ישירות עם הסליקה — מחזיר טוקן ואישור בלבד.' },
+];
 
 // Cache of the customer's link library (used by enroll + edit selectors).
 let LINKS = [];
@@ -381,7 +398,7 @@ function deviceCard(d) {
     ${d.maintenanceEnabled ? `<div class="pill off" style="margin-top:4px">🛠 בתחזוקה מרחוק${d.maintenanceMessage ? ' — ' + esc(d.maintenanceMessage) : ''}</div>` : ''}
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
-      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}</div>
+      🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}${d.paymentMode && d.paymentMode !== 'none' ? `<br/>💳 ${esc((PAYMENT_MODE_OPTIONS.find((o) => o.value === d.paymentMode) || {}).label || d.paymentMode)}` : ''}</div>
     <div class="actions"></div></div>`);
   const acts = $('.actions', c);
   const mk = (label, fn, cls = 'btn-light') => { const b = el(`<button class="btn ${cls} btn-sm">${label}</button>`); b.onclick = fn; acts.appendChild(b); };
@@ -506,6 +523,13 @@ async function editDevice(d) {
         <textarea id="maint-msg" style="width:100%;height:50px;font-size:13px" placeholder="הודעה ללקוח (אופציונלי) — למשל: המכשיר בתחזוקה זמנית, נחזור בקרוב">${esc(d.maintenanceMessage)}</textarea>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:4px">חוסם את המסך הנעול מיד ומציג הודעה במקומו, בלי לנתק את המכשיר או לאבד את הגדרותיו. כבו כדי להחזיר לשירות.</div></div>
+    <div class="field"><label>אמצעי תשלום</label>
+      <div id="pay-opts" style="display:flex;flex-direction:column;gap:6px">${PAYMENT_MODE_OPTIONS.map((o) => `
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+          <input type="radio" name="pay" value="${o.value}" ${d.paymentMode === o.value ? 'checked' : ''} style="width:16px;height:16px;padding:0;margin-top:2px;flex:none" />
+          <span><span>${esc(o.label)}</span><br/><span style="font-size:12px;color:var(--muted)">${esc(o.hint)}</span></span>
+        </label>`).join('')}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">שום מספר כרטיס (PAN) לא נשמר באתר או בקיוסק באף אחד מהמצבים. מצב טסט עד אישור.</div></div>
     <div class="field"><label>קוד תחזוקה מקומי (5 הקשות בפינת המסך)</label>
       <input id="ex" value="${esc(d.exitCode || '')}" dir="ltr" placeholder="${d.exitCode ? '' : 'לא הוגדר — מכשיר ללא אינטרנט ננעל לצמיתות'}" /></div>
       <div style="font-size:12px;color:var(--muted);margin-top:-8px">
@@ -542,10 +566,12 @@ async function editDevice(d) {
     const scheduleEnabled = $('#sched-on', m).checked;
     const signageEnabled = $('#sig-on', m).checked;
     const maintenanceEnabled = $('#maint-on', m).checked;
+    const payChecked = m.querySelector('input[name="pay"]:checked');
     const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value),
       scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value,
       signageEnabled, signageUrls: $('#sig-urls', m).value, signageIntervalSeconds: Number($('#sig-interval', m).value),
-      maintenanceEnabled, maintenanceMessage: $('#maint-msg', m).value };
+      maintenanceEnabled, maintenanceMessage: $('#maint-msg', m).value,
+      paymentMode: payChecked ? payChecked.value : d.paymentMode };
     const lk = $('#lk', m); if (lk && lk.value) body.linkId = Number(lk.value);
     try { await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       toast('נשמר. המכשיר יתעדכן מיד.'); m.remove(); loadDevices(); }
@@ -863,7 +889,7 @@ function clientModal(c) {
 // fleet without also silently overwriting every device's own home URL.
 async function viewTemplates() {
   $('#content').innerHTML = `<div class="topbar"><h1>תבניות</h1></div>
-    <p style="color:var(--muted);max-width:680px">שמרו כאן מדיניות (דומיינים מותרים, שעות פעילות, תצוגה, זום, מצב תחזוקה, קוד תחזוקה) והחילו אותה על כמה מכשירים בבת אחת. כל שדה מוחל רק אם סימנתם אותו — שדה לא-מסומן נשאר כפי שהיה בכל מכשיר.</p>
+    <p style="color:var(--muted);max-width:680px">שמרו כאן מדיניות (דומיינים מותרים, שעות פעילות, תצוגה, זום, מצב תחזוקה, אמצעי תשלום, קוד תחזוקה) והחילו אותה על כמה מכשירים בבת אחת. כל שדה מוחל רק אם סימנתם אותו — שדה לא-מסומן נשאר כפי שהיה בכל מכשיר.</p>
     <div class="card" style="max-width:680px">
       <h3>תבנית חדשה</h3>
       <div class="field"><label>שם התבנית</label><input id="tpl-name" placeholder="למשל: שעות פעילות אולם" /></div>
@@ -893,6 +919,12 @@ async function viewTemplates() {
           <label style="display:flex;align-items:center;gap:6px"><input id="tpl-maint-enabled" type="checkbox" /> מופעל (לא מסומן = החזרת המכשירים לשירות בכל מכשיר שהתבנית תוחל עליו)</label>
           <textarea id="tpl-maint-msg" style="width:100%;height:50px;font-size:13px;margin-top:6px" placeholder="הודעה ללקוח (אופציונלי)"></textarea>
         </div></div>
+      <div class="field"><label><input id="tpl-pay-on" type="checkbox" /> כלול אמצעי תשלום בתבנית</label>
+        <div id="tpl-pay-fields" style="display:none;margin-top:6px">${PAYMENT_MODE_OPTIONS.map((o) => `
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-top:4px">
+            <input type="radio" name="tpl-pay" value="${o.value}" ${o.value === 'none' ? 'checked' : ''} style="width:16px;height:16px;padding:0;margin-top:2px;flex:none" />
+            <span>${esc(o.label)}</span>
+          </label>`).join('')}</div></div>
       <div class="field"><label>קוד תחזוקה מקומי (אופציונלי; ריק = לא לכלול)</label><input id="tpl-exit" placeholder="לא לכלול" dir="ltr" /></div>
       <button class="btn btn-primary" id="tpl-create">שמור תבנית</button>
     </div>
@@ -903,6 +935,7 @@ async function viewTemplates() {
   $('#tpl-sched-on').onchange = (e) => { $('#tpl-sched-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-sig-on').onchange = (e) => { $('#tpl-sig-fields').style.display = e.target.checked ? 'block' : 'none'; };
   $('#tpl-maint-on').onchange = (e) => { $('#tpl-maint-fields').style.display = e.target.checked ? 'block' : 'none'; };
+  $('#tpl-pay-on').onchange = (e) => { $('#tpl-pay-fields').style.display = e.target.checked ? 'block' : 'none'; };
 
   $('#tpl-create').onclick = async () => {
     const name = $('#tpl-name').value.trim();
@@ -927,6 +960,10 @@ async function viewTemplates() {
       body.maintenanceEnabled = $('#tpl-maint-enabled').checked;
       body.maintenanceMessage = $('#tpl-maint-msg').value;
     }
+    if ($('#tpl-pay-on').checked) {
+      const payChecked = document.querySelector('input[name="tpl-pay"]:checked');
+      body.paymentMode = payChecked ? payChecked.value : 'none';
+    }
     const btn = $('#tpl-create');
     btn.disabled = true;
     try { await api('/templates', { method: 'POST', body: JSON.stringify(body) }); toast('התבנית נשמרה'); viewTemplates(); }
@@ -947,6 +984,7 @@ function templateSummary(t) {
   if (t.scheduleEnabled != null) parts.push(t.scheduleEnabled ? `שעות ${t.scheduleOpenTime}–${t.scheduleCloseTime}` : 'כיבוי תזמון');
   if (t.signageEnabled != null) parts.push(t.signageEnabled ? 'מצב תצוגה' : 'כיבוי תצוגה');
   if (t.maintenanceEnabled != null) parts.push(t.maintenanceEnabled ? 'מצב תחזוקה' : 'החזרה לשירות');
+  if (t.paymentMode != null) parts.push(`תשלום: ${(PAYMENT_MODE_OPTIONS.find((o) => o.value === t.paymentMode) || {}).label || t.paymentMode}`);
   return parts.length ? parts.join(' · ') : 'תבנית ריקה';
 }
 

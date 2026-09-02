@@ -258,6 +258,18 @@ ensureColumn('templates', 'maintenance_enabled', 'maintenance_enabled INTEGER');
 ensureColumn('templates', 'maintenance_message', 'maintenance_message TEXT');
 ensureColumn('policy_snapshots', 'maintenance_enabled', 'maintenance_enabled INTEGER');
 ensureColumn('policy_snapshots', 'maintenance_message', 'maintenance_message TEXT');
+// KIOSK_BUILD.md §7 "תשלום ואמצעי קלט (3 אופציות, ללא שמירת מספר כרטיס)".
+// 'none' on every existing device row — no payment input mode was ever
+// configured before this column existed, matching schedule_enabled/
+// signage_enabled's "0/off means never set" convention above. NULL on every
+// pre-existing template/snapshot, same as maintenance_enabled just above:
+// "not part of this template" / "not captured by this snapshot", not "off".
+// The PAN itself never lands in this database in any mode; this column only
+// records which of the 3 approved input flows the kiosk's payment form
+// should offer.
+ensureColumn('devices', 'payment_mode', "payment_mode TEXT NOT NULL DEFAULT 'none'");
+ensureColumn('templates', 'payment_mode', 'payment_mode TEXT');
+ensureColumn('policy_snapshots', 'payment_mode', 'payment_mode TEXT');
 
 export function logEvent(deviceId, userId, type, detail) {
   db.prepare(

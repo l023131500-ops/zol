@@ -121,6 +121,22 @@ test('buildTemplateFields allows disabling maintenance without a message', () =>
   assert.equal(fields.maintenance_message, null);
 });
 
+test('buildTemplateFields accepts each of the 3 payment modes plus "none"', () => {
+  for (const mode of ['none', 'manual', 'reader_prefill', 'emv_terminal']) {
+    const { fields, error } = buildTemplateFields({ paymentMode: mode });
+    assert.equal(error, undefined);
+    assert.equal(fields.payment_mode, mode);
+  }
+});
+
+test('buildTemplateFields rejects an unsupported paymentMode', () => {
+  assert.match(buildTemplateFields({ paymentMode: 'hid_magstripe' }).error, /לא נתמך/);
+});
+
+test('buildTemplateFields leaves payment_mode out entirely when untouched', () => {
+  assert.ok(!('payment_mode' in buildTemplateFields({}).fields));
+});
+
 test('policyPatchFromTemplate includes only the columns a template row actually sets', () => {
   const row = {
     home_url: null, allowed_host: 'example.com', idle_return_seconds: null,
@@ -154,6 +170,7 @@ test('templateColumns is a fixed whitelist, not derived from any request', () =>
   assert.ok(cols.includes('signage_interval_seconds'));
   assert.ok(cols.includes('maintenance_enabled'));
   assert.ok(cols.includes('maintenance_message'));
+  assert.ok(cols.includes('payment_mode'));
   assert.equal(new Set(cols).size, cols.length);
 });
 
@@ -168,4 +185,17 @@ test('policyPatchFromTemplate carries maintenance fields when the template sets 
     maintenanceEnabled: true,
     maintenanceMessage: 'סגור לתחזוקה',
   });
+});
+
+test('policyPatchFromTemplate carries paymentMode when the template sets it, omits it when NULL', () => {
+  const withPayment = {
+    home_url: null, allowed_host: null, idle_return_seconds: null, exit_code: null,
+    display_zoom_percent: null, schedule_enabled: null, schedule_open_time: null,
+    schedule_close_time: null, signage_enabled: null, signage_urls: null, signage_interval_seconds: null,
+    payment_mode: 'emv_terminal',
+  };
+  assert.deepEqual(policyPatchFromTemplate(withPayment), { paymentMode: 'emv_terminal' });
+
+  const withoutPayment = { ...withPayment, payment_mode: null };
+  assert.equal('paymentMode' in policyPatchFromTemplate(withoutPayment), false);
 });

@@ -18,7 +18,7 @@ const ROW = {
   schedule_enabled: 1, schedule_open_time: '09:00', schedule_close_time: '21:00',
   schedule_last_state: 'on',
   signage_enabled: 1, signage_urls: 'https://example.com/promo1\nhttps://example.com/promo2',
-  signage_interval_seconds: 20,
+  signage_interval_seconds: 20, payment_mode: 'emv_terminal',
 };
 
 test('device_token never survives the merge into a console frame', () => {

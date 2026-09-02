@@ -16,6 +16,7 @@ import { clampZoomPercent } from './display.js';
 import { validateScheduleWindow } from './schedule.js';
 import { validateSignagePlaylist, validateSignageInterval } from './signage.js';
 import { validateMaintenanceMessage } from './maintenance.js';
+import { validatePaymentMode } from './payment.js';
 import { SNAPSHOT_COLUMNS, MAX_SNAPSHOTS_PER_DEVICE, snapshotFieldsFromDevice, policyFieldsPresent } from './snapshots.js';
 
 /**
@@ -55,6 +56,7 @@ export function pushConfigUpdate(device, userId) {
     signageEnabled: !!device.signage_enabled, signageUrls: device.signage_urls || '',
     signageIntervalSeconds: device.signage_interval_seconds,
     maintenanceEnabled: !!device.maintenance_enabled, maintenanceMessage: device.maintenance_message || '',
+    paymentMode: device.payment_mode || 'none',
   }, userId ?? null);
 }
 
@@ -76,7 +78,14 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
   let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent,
         scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
         signageEnabled, signageUrls, signageIntervalSeconds,
-        maintenanceEnabled, maintenanceMessage } = body || {};
+        maintenanceEnabled, maintenanceMessage, paymentMode } = body || {};
+
+  // KIOSK_BUILD.md §7: exactly one of the 3 approved modes, or unchanged when
+  // the caller does not touch the field at all — same "undefined means no
+  // change" shape exitCode above uses.
+  const paymentModeCheck = validatePaymentMode(paymentMode);
+  if (!paymentModeCheck.ok) return { ok: false, status: 400, error: paymentModeCheck.error };
+  const paymentModeValue = paymentModeCheck.changed ? paymentModeCheck.value : null;
 
   // exitCode is validated up front, before any other write on this device:
   // COALESCE(?, exit_code) below treats '' as "clear" and undefined as "no
@@ -216,7 +225,8 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
      signage_enabled = COALESCE(?, signage_enabled), signage_urls = COALESCE(?, signage_urls),
      signage_interval_seconds = COALESCE(?, signage_interval_seconds),
      maintenance_enabled = COALESCE(?, maintenance_enabled),
-     maintenance_message = CASE WHEN ? = 1 THEN ? ELSE maintenance_message END WHERE id = ?`)
+     maintenance_message = CASE WHEN ? = 1 THEN ? ELSE maintenance_message END,
+     payment_mode = COALESCE(?, payment_mode) WHERE id = ?`)
     .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
          exitCodeValue,
@@ -231,6 +241,7 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
          maintenanceValues ? maintenanceValues.enabled : null,
          maintenanceValues ? 1 : 0,
          maintenanceValues ? maintenanceValues.message : null,
+         paymentModeValue,
          device.id);
   const fresh = db.prepare('SELECT * FROM devices WHERE id = ?').get(device.id);
   logEvent(device.id, userId, 'config_update', null);
