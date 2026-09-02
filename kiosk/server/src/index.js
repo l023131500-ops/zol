@@ -18,6 +18,7 @@ import alertRoutes from './routes/alerts.js';
 import analyticsRoutes from './routes/analytics.js';
 import adminRoutes from './routes/admin.js';
 import agentRoutes from './routes/agent.js';
+import launcherRoutes from './routes/launcher.js';
 import { issueCommand } from './commands.js';
 import { parseTimeToMinutes, desiredScreenState, minutesSinceMidnight } from './schedule.js';
 
@@ -117,6 +118,10 @@ site.use('/api', alertRoutes);
 site.use('/api', analyticsRoutes);
 site.use('/api/admin', adminRoutes);
 site.use('/api/agent', agentRoutes);
+// Public, unauthenticated by design (KIOSK_BUILD.md §2★ז) — kept off
+// '/api' itself so it can never accidentally end up behind a future
+// blanket requireAuth() applied at that mount point.
+site.use('/api/public', launcherRoutes);
 
 // Search engines index the real site only. A staging deployment that gets
 // indexed competes with production for the same queries and is very hard to
@@ -138,6 +143,12 @@ if (fs.existsSync(docsDir)) site.use('/docs', express.static(docsDir));
 
 // SPA-ish fallback for the console.
 site.get('/console', (req, res) => res.sendFile('console.html', { root: config.publicDir }));
+
+// KIOSK_BUILD.md §2★ז's public launcher page. Same "dynamic segment, so the
+// static middleware above never matches it" shape as /console: launcher.js
+// (public/js/launcher.js) reads the code back out of location.pathname
+// itself rather than this route needing to inject it server-side.
+site.get('/k/:code', (req, res) => res.sendFile('launcher.html', { root: config.publicDir }));
 
 app.use(base || '/', site);
 

@@ -1,7 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { customAlphabet } from 'nanoid';
-import { db, logEvent, approvedClientsForDevice } from '../db.js';
+import { db, logEvent, approvedClientsForDevice, nextAccessCode } from '../db.js';
 import { notifyConsolesOfDevice } from '../hub.js';
 import { normalizeClientCode } from '../clients.js';
 import { validateExitAttemptBody } from '../alerts.js';
@@ -74,11 +74,15 @@ router.post('/enroll', enrollLimiter, (req, res) => {
   } else if (existing) {
     return res.status(409).json({ error: 'מכשיר זה כבר רשום לחשבון אחר' });
   } else {
-    const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, idle_return_seconds, model, android_ver, app_version, last_seen)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    // §2★ז's launcher code is minted right away, same "new device gets a
+    // working identity from its first row" reasoning as device_token above —
+    // not lazily on first console view, so a technician can hand out
+    // GET /k/:code immediately after this device's very first enrollment.
+    const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, idle_return_seconds, model, android_ver, app_version, last_seen, access_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(owner.id, serial, enr.name || `מכשיר ${serial.slice(-4)}`, token,
            enr.allowed_host, enr.home_url, enr.idle_return_seconds ?? 0, req.body.model || null,
-           req.body.androidVersion || null, req.body.appVersion || null, now);
+           req.body.androidVersion || null, req.body.appVersion || null, now, nextAccessCode());
     device = db.prepare('SELECT * FROM devices WHERE id = ?').get(info.lastInsertRowid);
   }
 

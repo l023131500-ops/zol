@@ -36,6 +36,12 @@ export const CONSOLE_DEVICE_FIELDS = [
   'schedule_enabled', 'schedule_open_time', 'schedule_close_time',
   'signage_enabled', 'signage_urls', 'signage_interval_seconds',
   'maintenance_enabled', 'maintenance_message', 'payment_mode',
+  // KIOSK_BUILD.md §2★ז: not secret enough to withhold from the owner's own
+  // console (it is *meant* to be copied out and handed to a technician), but
+  // only useful there — same "device-scoped credential the owner needs to
+  // see to use the feature" shape as exit_code above, not the unconditional
+  // device_token this allow-list otherwise exists to withhold.
+  'access_code',
 ];
 
 /** Merge a live-status payload onto a device row, then drop everything not allow-listed. */

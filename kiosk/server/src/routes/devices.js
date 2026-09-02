@@ -1,6 +1,6 @@
 import express from 'express';
 import { customAlphabet } from 'nanoid';
-import { db, logEvent, approvedClientsForDevice } from '../db.js';
+import { db, logEvent, approvedClientsForDevice, nextAccessCode } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { issueCommand, COMMAND_TYPES } from '../commands.js';
 import { hostAllowed, hostsForUrl, normalizeHomeUrl } from '../hosts.js';
@@ -267,9 +267,9 @@ router.post('/enrollments/:id/usb-package', requireAuth, (req, res) => {
       .run(token, enr.name, enr.home_url, enr.allowed_host, enr.idle_return_seconds ?? 0, now, existing.id);
     device = db.prepare('SELECT * FROM devices WHERE id = ?').get(existing.id);
   } else {
-    const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, idle_return_seconds, last_seen)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(req.user.id, serial, enr.name || `מכשיר ${serial.slice(-4)}`, token, enr.allowed_host, enr.home_url, enr.idle_return_seconds ?? 0, now);
+    const info = db.prepare(`INSERT INTO devices (owner_id, serial, name, device_token, allowed_host, home_url, idle_return_seconds, last_seen, access_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(req.user.id, serial, enr.name || `מכשיר ${serial.slice(-4)}`, token, enr.allowed_host, enr.home_url, enr.idle_return_seconds ?? 0, now, nextAccessCode());
     device = db.prepare('SELECT * FROM devices WHERE id = ?').get(info.lastInsertRowid);
   }
 
@@ -310,7 +310,23 @@ function publicDevice(d) {
     signageIntervalSeconds: d.signage_interval_seconds ?? 15,
     maintenanceEnabled: !!d.maintenance_enabled, maintenanceMessage: d.maintenance_message || '',
     paymentMode: d.payment_mode || 'none',
+    accessCode: d.access_code || '',
   };
 }
+
+// KIOSK_BUILD.md §2★ז: an owner who suspects their launcher code leaked
+// (e.g. shared over an unencrypted channel to a technician) can rotate it
+// without touching device_token or any other field — same "rotate this one
+// secret, leave everything else alone" shape re-enrolling already gives
+// device_token. The old code stops resolving at GET /api/public/launcher/:code
+// the instant this commits, since that route looks the row up by access_code.
+router.post('/devices/:id/access-code/regenerate', requireAuth, (req, res) => {
+  const { device, error } = getOwnedDevice(req, req.params.id);
+  if (error) return res.sendStatus(error);
+  const code = nextAccessCode();
+  db.prepare('UPDATE devices SET access_code = ? WHERE id = ?').run(code, device.id);
+  logEvent(device.id, req.user.id, 'access_code_regenerated', null);
+  res.json({ accessCode: code });
+});
 
 export default router;
