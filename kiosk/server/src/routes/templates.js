@@ -3,6 +3,7 @@ import { db, logEvent } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { applyDevicePolicy } from '../policy.js';
 import { buildTemplateFields, policyPatchFromTemplate, templateColumns } from '../templatepolicy.js';
+import { isValidRowId } from '../inputguard.js';
 
 // KIOSK_BUILD.md §8 "קבוצות/תבניות: להחיל מדיניות על קבוצת מכשירים בבת אחת" —
 // a saved policy an owner applies to many of their own devices at once,
@@ -95,6 +96,16 @@ router.post('/templates/:id/apply', requireAuth, (req, res) => {
   const applied = [];
   const skipped = [];
   for (const id of deviceIds) {
+    // guardWriteBody (inputguard.js) exempts the `deviceIds` array itself
+    // from its top-level scalar check purely because it is an array, not
+    // because its own elements are exempt from validation — a malformed
+    // element (an object, a boolean, `{"toString":...}`) would otherwise
+    // reach the raw better-sqlite3 bind below and crash the whole request
+    // with a 500, the same class of bug that check closes everywhere else.
+    // Skipped like any other bad id, not fatal — this route's whole point is
+    // "an owner selecting a stale/partly-wrong list should not lose every
+    // device's update because one entry was bad."
+    if (!isValidRowId(id)) { skipped.push(id); continue; }
     const device = db.prepare('SELECT * FROM devices WHERE id = ?').get(id);
     if (!device || device.owner_id !== req.user.id) { skipped.push(id); continue; }
     const result = applyDevicePolicy(device, patch, req.user.id, `החלת תבנית "${template.name}"`);
