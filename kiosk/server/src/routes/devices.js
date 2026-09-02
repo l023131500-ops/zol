@@ -8,6 +8,7 @@ import { applyDevicePolicy, pushConfigUpdate } from '../policy.js';
 import { buildWindowsKioskScript } from '../windowspackage.js';
 import { sanitizeSerial, buildUsbOfflineScript } from '../usbpackage.js';
 import { buildQrProvisioningPayload, DEVICE_ADMIN_COMPONENT_NAME } from '../qrprovision.js';
+import { isUpdateAvailable, buildUpdateAppPayload } from '../appupdate.js';
 import { notifyConsolesOfDevice } from '../hub.js';
 import { config } from '../config.js';
 
@@ -44,7 +45,10 @@ router.get('/devices', requireAuth, (req, res) => {
   const rows = all
     ? db.prepare(`SELECT d.*, u.username owner_name FROM devices d JOIN users u ON u.id = d.owner_id ORDER BY d.online DESC, d.last_seen DESC`).all()
     : db.prepare('SELECT * FROM devices WHERE owner_id = ? ORDER BY online DESC, last_seen DESC').all(req.user.id);
-  res.json({ devices: rows.map(publicDevice) });
+  // KIOSK_BUILD.md §8 app-OTA: the console needs the fleet's target version
+  // to decide, per device, whether to offer "עדכן אפליקציה" — cheaper to
+  // send this once per list call than to duplicate it onto every row.
+  res.json({ devices: rows.map(publicDevice), latestAppVersion: config.kioskAgentLatestVersion || null });
 });
 
 router.get('/devices/:id', requireAuth, (req, res) => {
@@ -52,7 +56,7 @@ router.get('/devices/:id', requireAuth, (req, res) => {
   if (error) return res.sendStatus(error);
   const events = db.prepare('SELECT type, detail, created_at FROM events WHERE device_id = ? ORDER BY id DESC LIMIT 30').all(device.id);
   const commands = db.prepare('SELECT id, type, payload, status, result, created_at FROM commands WHERE device_id = ? ORDER BY id DESC LIMIT 20').all(device.id);
-  res.json({ device: publicDevice(device), events, commands });
+  res.json({ device: publicDevice(device), events, commands, latestAppVersion: config.kioskAgentLatestVersion || null });
 });
 
 router.patch('/devices/:id', requireAuth, (req, res) => {
@@ -172,7 +176,20 @@ router.post('/devices/:id/command', requireAuth, (req, res) => {
     // trailing newline in a pasted address should not reach the WebView).
     payload.url = checked.value;
   }
-  const cmd = issueCommand(device, type, payload, req.user.id);
+  let finalPayload = payload;
+  if (type === 'update_app') {
+    // Ignore whatever the browser sent — see appupdate.js's own note on why
+    // apkUrl/checksum/version are filled from server config, never trusted
+    // from the request body.
+    let built;
+    try { built = buildUpdateAppPayload(config); }
+    catch (e) { return res.status(501).json({ error: e.message }); }
+    if (!payload?.force && !isUpdateAvailable(device.app_version, built.version)) {
+      return res.status(400).json({ error: 'המכשיר כבר בגרסה העדכנית' });
+    }
+    finalPayload = built;
+  }
+  const cmd = issueCommand(device, type, finalPayload, req.user.id);
   res.json({ command: cmd });
 });
 

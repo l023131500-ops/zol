@@ -8,6 +8,10 @@ let TOKEN = localStorage.getItem('kf_token') || '';
 let ME = null;
 let SOCK = null;
 let DEVICES = [];
+// KIOSK_BUILD.md §8 app-OTA: the fleet's target version, so deviceCard() can
+// offer "עדכן אפליקציה" only on devices actually behind it. null when the
+// owner never set KIOSK_AGENT_LATEST_VERSION.
+let LATEST_APP_VERSION = null;
 
 // The server can be mounted under a prefix (more30.com/kiosk) or at the root
 // (the Railway URL, local dev). Derive it from where this page actually is
@@ -378,8 +382,9 @@ async function viewDevices() {
 }
 async function loadDevices() {
   const admin = ME.role === 'admin';
-  const { devices } = await api('/devices' + (admin ? '?all=1' : ''));
+  const { devices, latestAppVersion } = await api('/devices' + (admin ? '?all=1' : ''));
   DEVICES = devices.map(mapDevice);
+  LATEST_APP_VERSION = latestAppVersion || null;
   renderDevices();
 }
 function renderDevices() {
@@ -387,6 +392,12 @@ function renderDevices() {
   if (!DEVICES.length) { list.innerHTML = `<div class="card"><p style="color:var(--muted);margin:0">אין עדיין מכשירים. לחצו על "הוספת מכשיר" כדי ליצור קוד רישום.</p></div>`; return; }
   list.innerHTML = '';
   for (const d of DEVICES) list.appendChild(deviceCard(d));
+}
+// Mirrors appupdate.js's isUpdateAvailable() exactly (server is still the
+// enforcement point — POST /devices/:id/command re-checks this and 400s if
+// stale — this is only for deciding whether to show the button at all).
+function hasAppUpdateAvailable(d) {
+  return !!(d.appVersion && LATEST_APP_VERSION && d.appVersion !== LATEST_APP_VERSION);
 }
 function deviceCard(d) {
   const owner = ME.role === 'admin' && d.ownerName ? `<div class="serial">לקוח: ${esc(d.ownerName)}</div>` : '';
@@ -397,6 +408,7 @@ function deviceCard(d) {
       <span class="pill ${d.online ? 'on' : 'off'}">${d.online ? 'מחובר' : 'מנותק'}</span>
     </div>
     ${d.maintenanceEnabled ? `<div class="pill off" style="margin-top:4px">🛠 בתחזוקה מרחוק${d.maintenanceMessage ? ' — ' + esc(d.maintenanceMessage) : ''}</div>` : ''}
+    ${hasAppUpdateAvailable(d) ? `<div class="pill on" style="margin-top:4px">⬆️ עדכון אפליקציה זמין (v${esc(LATEST_APP_VERSION)})</div>` : ''}
     <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
       🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}${d.paymentMode && d.paymentMode !== 'none' ? `<br/>💳 ${esc((PAYMENT_MODE_OPTIONS.find((o) => o.value === d.paymentMode) || {}).label || d.paymentMode)}` : ''}${d.accessCode ? `<br/>🚪 קוד בחירה: <b>${esc(d.accessCode)}</b>` : ''}</div>
@@ -411,6 +423,7 @@ function deviceCard(d) {
   mk('🧹 נקה מטמון', () => cmd(d, 'clear_cache'));
   mk('📸 צילום מסך', () => cmd(d, 'screenshot'));
   if (d.lastScreenshotAt) mk('🖼️ צילום אחרון', () => viewScreenshot(d));
+  if (hasAppUpdateAvailable(d)) mk('⬆️ עדכן אפליקציה', () => confirmCmd(d, 'update_app', `לעדכן את המכשיר ל-v${LATEST_APP_VERSION}?`));
   mk('📋 יומן', () => viewDeviceLog(d));
   mk('🪟 חבילת Windows', () => downloadFile(`/devices/${d.id}/windows-package`, `kioskfleet-${d.serial}.ps1`).catch((e) => toast(e.message, false)));
   // KIOSK_BUILD.md §2★ז: the launcher page (public/launcher.html) reads its
@@ -466,7 +479,7 @@ const EVENT_LABELS = {
 const COMMAND_LABELS = {
   reboot: 'אתחול', reload: 'רענון', set_url: 'החלפת כתובת', screen_on: 'הדלקת מסך', screen_off: 'כיבוי מסך',
   clear_cache: 'ניקוי מטמון', lock: 'נעילה', unlock: 'שחרור זמני', screenshot: 'צילום מסך',
-  message: 'הודעה על המסך', update_config: 'עדכון הגדרות',
+  message: 'הודעה על המסך', update_config: 'עדכון הגדרות', update_app: 'עדכון אפליקציה',
 };
 const COMMAND_STATUS_LABELS = { pending: 'ממתין', delivered: 'נשלח', done: 'בוצע', failed: 'נכשל' };
 const fmtTime = (t) => (t ? new Date(t + 'Z').toLocaleString('he-IL') : '—');

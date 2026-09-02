@@ -1,8 +1,12 @@
 package com.kioskfleet.agent
 
+import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.BatteryManager
 import android.os.Build
@@ -12,9 +16,12 @@ import android.util.Base64
 import okhttp3.*
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /** Actions the kiosk UI must perform in response to a remote command. */
@@ -230,6 +237,17 @@ class AgentClient(
             return
         }
 
+        // KIOSK_BUILD.md §8 "עדכון מרחוק (OTA) ... של האפליקציה" — also async
+        // like screenshot above, and for the same reason: downloading a whole
+        // APK cannot run on the calling thread (WebSocket callback or the
+        // heartbeat's own background thread), so it gets its own Thread and
+        // reports through the normal ack() path once it knows an outcome,
+        // rather than falling into the synchronous block below.
+        if (type == "update_app") {
+            downloadAndInstallUpdate(id, payload)
+            return
+        }
+
         var ok = true
         var result = "ok"
         try {
@@ -311,6 +329,122 @@ class AgentClient(
                 dpm.reboot(admin); "ok"
             } else "not device owner"
         } catch (e: Exception) { e.message ?: "reboot failed" }
+    }
+
+    /**
+     * Downloads the APK the server pointed at, verifies its signing
+     * certificate against the payload's checksum (the same
+     * KIOSK_AGENT_APK_SIGNATURE_CHECKSUM Route A's QR provisioning already
+     * verifies before trusting a DPC — reused here rather than a raw file
+     * hash so one config value serves both: a legitimate rebuild with
+     * identical source still passes as long as it is signed with the same
+     * key, which is the property that actually matters), then silently
+     * installs it via PackageInstaller — a Device Owner app may
+     * install/update packages with no user prompt, the same elevated trust
+     * reboot() above already relies on.
+     *
+     * The checksum check is not optional: skipping it would make this a
+     * remote-code-execution path onto every enrolled device from whatever
+     * URL config.kioskAgentApkUrl happens to point at.
+     *
+     * Acks immediately after a successful commit() rather than waiting for
+     * the install to actually finish — self-updating its own running
+     * package means the process can be killed by the OS at any point once
+     * the install completes, so there is no reliable way for *this* process
+     * to observe final success. The server's own next heartbeat (which
+     * carries BuildConfig.VERSION_NAME) is the real confirmation an owner
+     * should trust, the same "can't confirm from here, the next heartbeat
+     * will" honesty reboot()'s own ack already implies.
+     */
+    private fun downloadAndInstallUpdate(commandId: Long, payload: JSONObject) {
+        Thread {
+            val apkUrl = payload.optString("apkUrl")
+            val checksum = payload.optString("checksum")
+            if (apkUrl.isEmpty() || checksum.isEmpty()) {
+                if (commandId >= 0) ack(commandId, false, "missing apkUrl/checksum")
+                return@Thread
+            }
+            val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            if (!dpm.isDeviceOwnerApp(ctx.packageName)) {
+                if (commandId >= 0) ack(commandId, false, "not device owner")
+                return@Thread
+            }
+            val apkFile = File(ctx.cacheDir, "agent-update.apk")
+            try {
+                (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 20000; readTimeout = 60000
+                }.let { conn ->
+                    conn.inputStream.use { input ->
+                        FileOutputStream(apkFile).use { out -> input.copyTo(out) }
+                    }
+                    if (conn.responseCode !in 200..299) throw Exception("download failed (${conn.responseCode})")
+                }
+
+                val actualChecksum = apkSigningCertChecksum(apkFile.absolutePath)
+                    ?: throw Exception("could not read APK signature")
+                if (actualChecksum != checksum) {
+                    throw Exception("checksum mismatch")
+                }
+
+                val installer = ctx.packageManager.packageInstaller
+                val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+                }
+                val sessionId = installer.createSession(params)
+                val session = installer.openSession(sessionId)
+                session.use { s ->
+                    s.openWrite("agent-update", 0, apkFile.length()).use { sessionOut ->
+                        apkFile.inputStream().use { it.copyTo(sessionOut) }
+                        s.fsync(sessionOut)
+                    }
+                    // commit() requires a non-null IntentSender, but nothing here
+                    // can act on its async result anyway (see the doc comment
+                    // above) — an explicit-to-our-own-package action with no
+                    // manifest receiver behind it, same as any broadcast nobody
+                    // subscribes to: the system fires it into the void, harmlessly.
+                    val statusIntent = Intent("${ctx.packageName}.UPDATE_STATUS").setPackage(ctx.packageName)
+                    val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                        PendingIntent.FLAG_MUTABLE else 0
+                    val statusPi = PendingIntent.getBroadcast(ctx, sessionId, statusIntent, piFlags)
+                    s.commit(statusPi.intentSender)
+                }
+                ack(commandId, true, "update committed; confirm via next heartbeat's appVersion")
+            } catch (e: Exception) {
+                ack(commandId, false, e.message ?: "update failed")
+            } finally {
+                apkFile.delete()
+            }
+        }.start()
+    }
+
+    /**
+     * SHA-256 of the APK's first signing certificate, base64url-unpadded —
+     * identical format to qrprovision.js's own CHECKSUM_RE so
+     * KIOSK_AGENT_APK_SIGNATURE_CHECKSUM covers both Route A provisioning
+     * and this. `GET_SIGNING_CERTIFICATES` needs API 28+; minSdk here is 26
+     * (Lock Task Mode's own floor), so API 26/27 falls back to the
+     * deprecated `GET_SIGNATURES` — still correct on those releases, just
+     * without APK Signature Scheme v3 key-rotation awareness, which does
+     * not matter for a checksum pinned to one known signing key.
+     */
+    private fun apkSigningCertChecksum(apkPath: String): String? {
+        val pm = ctx.packageManager
+        val certBytes: ByteArray? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            @Suppress("DEPRECATION")
+            val info = pm.getPackageArchiveInfo(apkPath, PackageManager.GET_SIGNING_CERTIFICATES) ?: return null
+            val signers = info.signingInfo?.apkContentsSigners
+            if (signers.isNullOrEmpty()) null else signers[0].toByteArray()
+        } else {
+            @Suppress("DEPRECATION")
+            val info = pm.getPackageArchiveInfo(apkPath, PackageManager.GET_SIGNATURES) ?: return null
+            @Suppress("DEPRECATION")
+            val signatures = info.signatures
+            if (signatures.isNullOrEmpty()) null else signatures[0].toByteArray()
+        }
+        if (certBytes == null) return null
+        val digest = MessageDigest.getInstance("SHA-256").digest(certBytes)
+        return Base64.encodeToString(digest, Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE)
     }
 
     private fun ack(commandId: Long, ok: Boolean, result: String) {

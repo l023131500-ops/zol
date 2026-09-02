@@ -13,6 +13,7 @@ export const COMMAND_TYPES = new Set([
   'screenshot',  // capture and upload a screenshot
   'message',     // show a full-screen message (payload.text)
   'update_config', // re-pull config (home_url / allowed_host)
+  'update_app',    // download+silently install a newer agent APK (Device Owner only)
 ]);
 
 /** Create a command, persist it, and push to the agent if it is connected. */

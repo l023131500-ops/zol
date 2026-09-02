@@ -77,6 +77,12 @@ export const config = {
   // without them.
   kioskAgentApkUrl: (process.env.KIOSK_AGENT_APK_URL || '').trim(),
   kioskAgentApkSignatureChecksum: (process.env.KIOSK_AGENT_APK_SIGNATURE_CHECKSUM || '').trim(),
+  // KIOSK_BUILD.md §8 "עדכון מרחוק (OTA) ... של האפליקציה": the version
+  // string (BuildConfig.VERSION_NAME) the currently-hosted release APK
+  // reports. Optional like the two above — appupdate.js refuses with the
+  // same documented-missing-token shape instead of a broken command when
+  // this is unset.
+  kioskAgentLatestVersion: (process.env.KIOSK_AGENT_LATEST_VERSION || '').trim(),
   isProd: process.env.NODE_ENV === 'production',
   root,
   publicDir: path.resolve(root, 'public'),
