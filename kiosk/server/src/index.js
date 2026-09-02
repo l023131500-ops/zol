@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { db } from './db.js';
 import { ensureSeed } from './seed.js';
 import { attachHub } from './hub.js';
+import { guardWriteBody } from './inputguard.js';
 import authRoutes from './routes/auth.js';
 import deviceRoutes from './routes/devices.js';
 import linkRoutes from './routes/links.js';
@@ -70,6 +71,11 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+// Closes the write-path crash class documented in inputguard.js's own header
+// comment — applied globally, before every route file below, so it covers
+// the JWT-authenticated console API and the device-token-authenticated
+// /api/agent/* routes alike.
+app.use(guardWriteBody);
 
 const base = config.basePath;
 
