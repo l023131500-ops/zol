@@ -10,6 +10,12 @@ object Prefs {
     const val SERVER_URL   = "server_url"      // e.g. https://panel.kioskfleet.com
     const val DEVICE_TOKEN = "device_token"    // issued at enrollment
     const val HOME_URL     = "home_url"        // the specific event/venue link
+    // KIOSK_BUILD.md §2★א: "קישור שיוצג על המכשיר" — the specific link shown
+    // on THIS device's screen, distinct from HOME_URL (the fleet-wide default
+    // every device locks to). Empty = no per-device override, fall back to
+    // HOME_URL everywhere this is read — exactly what every device enrolled
+    // before this key existed already does.
+    const val DISPLAY_URL  = "display_url"
     const val ALLOWED_HOST = "allowed_host"    // comma-separated hosts allowed (event + payment)
     const val IDLE_RETURN  = "idle_return"     // seconds of inactivity → back to HOME_URL (0 = off)
     const val DEVICE_NAME  = "device_name"

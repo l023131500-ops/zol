@@ -43,6 +43,10 @@
 // form.
 export const CONSOLE_DEVICE_FIELDS = [
   'id', 'owner_id', 'owner_name', 'serial', 'name', 'allowed_host', 'home_url',
+  // KIOSK_BUILD.md §2★א's per-device override — on the same footing as
+  // `home_url` right before it: on-device enforcement, not a secret, and the
+  // console needs it to render the current selection in the device-edit form.
+  'display_url',
   'idle_return_seconds', 'status', 'online', 'last_seen', 'app_version',
   'battery', 'model', 'android_ver', 'ip', 'created_at', 'exit_code',
   'last_screenshot_at', 'display_zoom_percent', 'display_orientation',

@@ -34,7 +34,7 @@ interface CommandHandler {
     fun onLock()
     fun onUnlock(minutes: Int)
     fun onMessage(text: String)
-    fun onConfigUpdated(homeUrl: String, allowedHost: String, idleReturnSeconds: Int, displayZoomPercent: Int, displayOrientation: String)
+    fun onConfigUpdated(homeUrl: String, displayUrl: String, allowedHost: String, idleReturnSeconds: Int, displayZoomPercent: Int, displayOrientation: String)
     fun onScreenshot(commandId: Long)
 }
 
@@ -136,6 +136,12 @@ class AgentClient(
             json.optJSONObject("config")?.let { cfg ->
                 val home = cfg.optString("homeUrl"); val host = cfg.optString("allowedHost")
                 val idle = cfg.optInt("idleReturnSeconds", 0)
+                // KIOSK_BUILD.md §2★א: same "must land on its own" shape as
+                // zoom/orientation below — an owner setting only the per-device
+                // display-url override must not need an unrelated home-link
+                // edit to ride along before it reaches the screen.
+                val display = cfg.optString("displayUrl", Prefs.get(ctx, Prefs.DISPLAY_URL))
+                val displayChanged = display != Prefs.get(ctx, Prefs.DISPLAY_URL)
                 // Independent of the homeUrl gate below: the maintenance code
                 // has to keep landing even on a heartbeat that carries no new
                 // home link, or a code set after enrollment never reaches a
@@ -221,18 +227,21 @@ class AgentClient(
                 if (gestureHoldMs.toString() != Prefs.get(ctx, Prefs.EXIT_GESTURE_HOLD_MS)) Prefs.set(ctx, Prefs.EXIT_GESTURE_HOLD_MS, gestureHoldMs.toString())
                 if (home.isNotEmpty()) {
                     val changed = home != Prefs.get(ctx, Prefs.HOME_URL) ||
+                        displayChanged ||
                         host != Prefs.get(ctx, Prefs.ALLOWED_HOST) ||
                         idle.toString() != Prefs.get(ctx, Prefs.IDLE_RETURN) ||
                         zoomChanged || orientationChanged || maintenanceChanged || scheduleChanged
                     Prefs.set(ctx, Prefs.HOME_URL, home)
+                    Prefs.set(ctx, Prefs.DISPLAY_URL, display)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
-                    if (changed) ui.post { handler.onConfigUpdated(home, host, idle, zoom, orientation) }
-                } else if (zoomChanged || orientationChanged || maintenanceChanged || scheduleChanged) {
+                    if (changed) ui.post { handler.onConfigUpdated(home, display, host, idle, zoom, orientation) }
+                } else if (zoomChanged || orientationChanged || maintenanceChanged || scheduleChanged || displayChanged) {
                     // No home-link change to carry the update, but the zoom/
-                    // orientation/maintenance/schedule state still has to reach the
-                    // on-screen WebView/Activity.
-                    ui.post { handler.onConfigUpdated(Prefs.get(ctx, Prefs.HOME_URL), Prefs.get(ctx, Prefs.ALLOWED_HOST), idle, zoom, orientation) }
+                    // orientation/maintenance/schedule/display state still has to
+                    // reach the on-screen WebView/Activity.
+                    Prefs.set(ctx, Prefs.DISPLAY_URL, display)
+                    ui.post { handler.onConfigUpdated(Prefs.get(ctx, Prefs.HOME_URL), display, Prefs.get(ctx, Prefs.ALLOWED_HOST), idle, zoom, orientation) }
                 }
             }
             val cmds = json.optJSONArray("commands") ?: return
@@ -281,6 +290,11 @@ class AgentClient(
                 "message" -> ui.post { handler.onMessage(payload.optString("text")) }
                 "update_config" -> {
                     val home = payload.optString("homeUrl", Prefs.get(ctx, Prefs.HOME_URL))
+                    // KIOSK_BUILD.md §2★א's per-device override — same "unconditional
+                    // persist, always passed to onConfigUpdated" shape as home above,
+                    // since this branch (an operator's own console push) is always an
+                    // active management action rather than a "did anything change" poll.
+                    val display = payload.optString("displayUrl", Prefs.get(ctx, Prefs.DISPLAY_URL))
                     val host = payload.optString("allowedHost", Prefs.get(ctx, Prefs.ALLOWED_HOST))
                     val idle = payload.optInt("idleReturnSeconds",
                         Prefs.get(ctx, Prefs.IDLE_RETURN).toIntOrNull() ?: 0)
@@ -329,6 +343,7 @@ class AgentClient(
                     val gestureHoldMs = payload.optInt("exitGestureHoldMs",
                         Prefs.get(ctx, Prefs.EXIT_GESTURE_HOLD_MS).toIntOrNull() ?: 0)
                     Prefs.set(ctx, Prefs.HOME_URL, home)
+                    Prefs.set(ctx, Prefs.DISPLAY_URL, display)
                     Prefs.set(ctx, Prefs.ALLOWED_HOST, host)
                     Prefs.set(ctx, Prefs.IDLE_RETURN, idle.toString())
                     Prefs.set(ctx, Prefs.ADMIN_CODE, adminCode)
@@ -346,7 +361,7 @@ class AgentClient(
                     Prefs.set(ctx, Prefs.EXIT_GESTURE_TAPS, gestureTaps.toString())
                     Prefs.set(ctx, Prefs.EXIT_GESTURE_CORNER, gestureCorner)
                     Prefs.set(ctx, Prefs.EXIT_GESTURE_HOLD_MS, gestureHoldMs.toString())
-                    ui.post { handler.onConfigUpdated(home, host, idle, zoom, orientation) }
+                    ui.post { handler.onConfigUpdated(home, display, host, idle, zoom, orientation) }
                 }
                 "reboot" -> { result = reboot() ; ok = result == "ok" }
                 else -> { ok = false; result = "unknown command" }

@@ -314,6 +314,21 @@ ensureColumn('policy_snapshots', 'exit_gesture_taps', 'exit_gesture_taps INTEGER
 ensureColumn('policy_snapshots', 'exit_gesture_corner', 'exit_gesture_corner TEXT');
 ensureColumn('policy_snapshots', 'exit_gesture_hold_ms', 'exit_gesture_hold_ms INTEGER');
 
+// KIOSK_BUILD.md §2★א (marked "מחייב, גובר על כל השאר" — mandatory, overrides
+// everything else): the console's device-edit screen was always supposed to
+// have two fields, "אתר ראשי" (home_url — the fleet-wide default the device
+// locks to) and "קישור שיוצג על המכשיר" (this column — the specific link
+// shown on THAT device's screen), but only the first ever existed; every
+// device has been showing its owner's home_url with no way to point one
+// specific device at a different link without changing what it is locked to.
+// NULL on every existing row = "no override, keep showing home_url" — the
+// exact behavior every device already has today, so this migration changes
+// nothing on its own. Deliberately absent from `templates`/`policy_snapshots`
+// (unlike home_url above): a template/snapshot is a *shared* preset applied
+// across a batch of devices, while this field's entire purpose is to be
+// different per device — bulk-applying the same override would defeat it.
+ensureColumn('devices', 'display_url', 'display_url TEXT');
+
 /** A fresh access code guaranteed not to collide with any row already in the table. */
 export function nextAccessCode() {
   for (;;) {

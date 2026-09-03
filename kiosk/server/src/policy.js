@@ -52,7 +52,13 @@ export function saveSnapshot(device, reason, userId) {
 // cannot drift between call sites.
 export function pushConfigUpdate(device, userId) {
   issueCommand(device, 'update_config', {
-    homeUrl: device.home_url, allowedHost: device.allowed_host, idleReturnSeconds: device.idle_return_seconds,
+    homeUrl: device.home_url,
+    // KIOSK_BUILD.md §2★א: the per-device override rides the same command as
+    // homeUrl right above it — the agent already treats every field here as
+    // "sent unconditionally, applied whether or not it changed" (see this
+    // function's own header comment), same footing as displayZoomPercent below.
+    displayUrl: device.display_url || '',
+    allowedHost: device.allowed_host, idleReturnSeconds: device.idle_return_seconds,
     adminCode: device.exit_code || '', displayZoomPercent: device.display_zoom_percent,
     approvedClients: approvedClientsForDevice(device.id),
     signageEnabled: !!device.signage_enabled, signageUrls: device.signage_urls || '',
@@ -89,7 +95,7 @@ export function pushConfigUpdate(device, userId) {
  * spends a slot in the 20-snapshot budget for nothing it would protect.
  */
 export function applyDevicePolicy(device, body, userId, snapshotReason) {
-  let { name, homeUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent, displayOrientation,
+  let { name, homeUrl, displayUrl, allowedHost, idleReturnSeconds, linkId, exitCode, displayZoomPercent, displayOrientation,
         scheduleEnabled, scheduleOpenTime, scheduleCloseTime,
         signageEnabled, signageUrls, signageIntervalSeconds,
         maintenanceEnabled, maintenanceMessage, paymentMode,
@@ -236,6 +242,33 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
     allowedHost = hostsForUrl(homeUrl, allowedHost || device.allowed_host);
   }
 
+  // KIOSK_BUILD.md §2★א's per-device override — same normalizeHomeUrl() gate
+  // as homeUrl above (an empty string is a valid, deliberate "clear the
+  // override" answer, undefined means "field not touched"). Folds its own
+  // host into allowedHost the same way homeUrl does right above — this is the
+  // exact link the WebView will actually load, so its host must be reachable
+  // too, or the on-device allow-list check that homeUrl's own comment
+  // describes would block the very override this field exists to show.
+  // Unlike homeUrl, a non-empty value is additive, not the caller's other
+  // choice: it must never *narrow* a list an explicit allowedHost already set
+  // in this same request.
+  let displayUrlValue = null;
+  if (displayUrl !== undefined) {
+    const checkedDisplay = normalizeHomeUrl(displayUrl);
+    if (!checkedDisplay.ok) {
+      return {
+        ok: false, status: 400,
+        error: checkedDisplay.reason === 'scheme'
+          ? 'הקישור שיוצג במכשיר חייב להתחיל ב-http:// או ב-https://'
+          : 'הקישור שיוצג במכשיר אינו כתובת תקינה',
+      };
+    }
+    displayUrlValue = checkedDisplay.value;
+    if (displayUrlValue) {
+      allowedHost = hostsForUrl(displayUrlValue, allowedHost || device.allowed_host);
+    }
+  }
+
   // Whatever route the list arrived by, store it clean. The allow-list is what
   // stands between a locked device and the open internet; an entry like
   // "https://pay.example.com/checkout" matches no host at all, so a list that
@@ -259,6 +292,7 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
   }
 
   db.prepare(`UPDATE devices SET name = COALESCE(?, name), home_url = COALESCE(?, home_url),
+     display_url = COALESCE(?, display_url),
      allowed_host = COALESCE(?, allowed_host), idle_return_seconds = COALESCE(?, idle_return_seconds),
      exit_code = COALESCE(?, exit_code), display_zoom_percent = COALESCE(?, display_zoom_percent),
      schedule_enabled = COALESCE(?, schedule_enabled), schedule_open_time = COALESCE(?, schedule_open_time),
@@ -273,7 +307,7 @@ export function applyDevicePolicy(device, body, userId, snapshotReason) {
      exit_gesture_taps = COALESCE(?, exit_gesture_taps),
      exit_gesture_corner = COALESCE(?, exit_gesture_corner),
      exit_gesture_hold_ms = COALESCE(?, exit_gesture_hold_ms) WHERE id = ?`)
-    .run(name ?? null, homeUrl ?? null, allowedHost ?? null,
+    .run(name ?? null, homeUrl ?? null, displayUrlValue, allowedHost ?? null,
          idleReturnSeconds != null ? Math.max(0, Number(idleReturnSeconds)) : null,
          exitCodeValue,
          displayZoomPercent != null ? clampZoomPercent(displayZoomPercent) : null,

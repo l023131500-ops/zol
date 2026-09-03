@@ -123,6 +123,18 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     }
 
     /**
+     * KIOSK_BUILD.md §2★א: "אתר ראשי" (HOME_URL) is the fleet-wide default
+     * that locks the device; "קישור שיוצג על המכשיר" (DISPLAY_URL) is what
+     * should actually be on screen for *this* device. Every navigation that
+     * used to mean "go back to the device's own home" — returnToVenue(),
+     * switchToHome(), the first-boot fallback — means this instead. Empty
+     * DISPLAY_URL (no per-device override, or a device enrolled before this
+     * field existed) falls back to HOME_URL exactly as before.
+     */
+    private fun homeDisplayCandidate(): String =
+        Prefs.get(this, Prefs.DISPLAY_URL).ifEmpty { Prefs.get(this, Prefs.HOME_URL) }
+
+    /**
      * After inactivity, return to the exact event/venue link — never a generic home.
      *
      * Gated the same way onSetUrl/onConfigUpdated already gate a navigation:
@@ -137,7 +149,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         // `allowedHosts` — idle timeout while viewing an approved client's
         // site must fall back to the device's own home, not judge HOME_URL
         // against that client's narrower scope and wrongly reject it.
-        val venue = safeStoredUrl(Prefs.get(this, Prefs.HOME_URL), deviceAllowedHosts)
+        val venue = safeStoredUrl(homeDisplayCandidate(), deviceAllowedHosts)
         if (venue.isNotEmpty()) {
             activeClientCode = null
             allowedHosts = deviceAllowedHosts
@@ -239,7 +251,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         // list just loaded above — an owner who narrows the allow-list (moves
         // the device off an old venue) between app restarts must not have
         // that revocation undone by the restart re-opening the old page.
-        val start = safeStoredUrl(Prefs.get(this, Prefs.LAST_URL)).ifEmpty { safeStoredUrl(Prefs.get(this, Prefs.HOME_URL)) }
+        val start = safeStoredUrl(Prefs.get(this, Prefs.LAST_URL)).ifEmpty { safeStoredUrl(homeDisplayCandidate()) }
         webView.loadUrl(start.ifEmpty { "about:blank" })
         resetIdleTimer()
         // Resume into whatever maintenance state the last config left behind
@@ -470,7 +482,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         } catch (e: Exception) { null }
         agent.uploadScreenshot(commandId, bitmap)
     }
-    override fun onConfigUpdated(homeUrl: String, host: String, idleSeconds: Int, zoomPercent: Int, orientation: String) {
+    override fun onConfigUpdated(homeUrl: String, displayUrl: String, host: String, idleSeconds: Int, zoomPercent: Int, orientation: String) {
         deviceAllowedHosts = host
         idleReturnSeconds = idleSeconds
         val zoomChanged = zoomPercent != displayZoomPercent
@@ -502,7 +514,12 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         // one. Loading homeUrl unchecked here was the one path that could
         // put the WebView's very first document load outside the allow-list
         // this same call just installed.
-        if (homeUrl.isNotEmpty()) {
+        // KIOSK_BUILD.md §2★א: a pushed display-url override takes precedence
+        // over the fleet-wide home link, same as homeDisplayCandidate() below —
+        // an operator setting only the per-device override must navigate too,
+        // not just persist quietly until some unrelated homeUrl push arrives.
+        val target = displayUrl.ifEmpty { homeUrl }
+        if (target.isNotEmpty()) {
             // A pushed home-link change always means "go back to the device's
             // own home" — exit whatever client scope (if any) was active, the
             // same as onSetUrl/returnToVenue already do for their own
@@ -513,7 +530,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
             stopSignage()
             activeClientCode = null
             allowedHosts = host
-            if (hostAllowed(android.net.Uri.parse(homeUrl).host)) webView.loadUrl(homeUrl)
+            if (hostAllowed(android.net.Uri.parse(target).host)) webView.loadUrl(target)
             else toast("קישור חסום: מחוץ לדומיינים המורשים")
             // A navigation above already re-applies zoom via onPageFinished.
         } else {
@@ -779,7 +796,7 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private fun switchToHome() {
         activeClientCode = null
         allowedHosts = deviceAllowedHosts
-        val venue = safeStoredUrl(Prefs.get(this, Prefs.HOME_URL), deviceAllowedHosts)
+        val venue = safeStoredUrl(homeDisplayCandidate(), deviceAllowedHosts)
         clearBrowsingSession()
         webView.loadUrl(venue.ifEmpty { "about:blank" })
         webView.clearHistory()

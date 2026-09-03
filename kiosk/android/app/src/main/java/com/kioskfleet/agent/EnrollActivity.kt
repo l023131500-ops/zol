@@ -204,10 +204,16 @@ class EnrollActivity : AppCompatActivity() {
         Prefs.set(this, Prefs.DEVICE_TOKEN, json.getString("deviceToken"))
         val dev = json.getJSONObject("device")
         Prefs.set(this, Prefs.HOME_URL, dev.optString("homeUrl"))
+        // KIOSK_BUILD.md §2★א: empty on a freshly enrolled device (there is no
+        // console UI to set a per-device override before the device exists),
+        // but read here so a Route D offline package pre-loaded with one — or
+        // a re-enroll of a device that already had one set — is not dropped.
+        val displayUrl = dev.optString("displayUrl")
+        Prefs.set(this, Prefs.DISPLAY_URL, displayUrl)
         Prefs.set(this, Prefs.ALLOWED_HOST, dev.optString("allowedHost"))
         Prefs.set(this, Prefs.IDLE_RETURN, dev.optInt("idleReturnSeconds", 0).toString())
         Prefs.set(this, Prefs.DEVICE_NAME, dev.optString("name"))
-        Prefs.set(this, Prefs.LAST_URL, dev.optString("homeUrl"))
+        Prefs.set(this, Prefs.LAST_URL, displayUrl.ifEmpty { dev.optString("homeUrl") })
         Prefs.set(this, Prefs.ADMIN_CODE, dev.optString("adminCode"))
         Prefs.set(this, Prefs.DISPLAY_ZOOM, dev.optInt("displayZoomPercent", 100).toString())
         Prefs.set(this, Prefs.DISPLAY_ORIENTATION, dev.optString("displayOrientation", "landscape"))

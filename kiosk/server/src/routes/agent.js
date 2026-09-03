@@ -94,7 +94,14 @@ router.post('/enroll', enrollLimiter, (req, res) => {
     deviceToken: token,
     device: {
       id: device.id, name: device.name, serial: device.serial,
-      homeUrl: device.home_url, allowedHost: device.allowed_host,
+      homeUrl: device.home_url,
+      // KIOSK_BUILD.md §2★א — empty on a brand-new enrollment (there is no
+      // console UI to set a per-device override before the device exists),
+      // but read here in case a re-enrollment redeems a device row that
+      // already had one set, same "must land on its own" reasoning adminCode
+      // below gives.
+      displayUrl: device.display_url || '',
+      allowedHost: device.allowed_host,
       idleReturnSeconds: device.idle_return_seconds,
       // Enrollment is the last moment before the device locks, and the first
       // heartbeat may come after it — so the maintenance code has to land
@@ -183,7 +190,7 @@ router.post('/heartbeat', (req, res) => {
 
   res.json({
     config: {
-      homeUrl: fresh.home_url, allowedHost: fresh.allowed_host,
+      homeUrl: fresh.home_url, displayUrl: fresh.display_url || '', allowedHost: fresh.allowed_host,
       name: fresh.name, idleReturnSeconds: fresh.idle_return_seconds,
       adminCode: fresh.exit_code || '', displayZoomPercent: fresh.display_zoom_percent,
       displayOrientation: fresh.display_orientation || 'landscape',

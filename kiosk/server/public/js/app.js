@@ -317,6 +317,10 @@ function connectSocket() {
 function mapDevice(d) {
   return { id: d.id, name: d.name, serial: d.serial, ownerName: d.owner_name || d.ownerName,
     online: d.online === 1 || d.online === true, status: d.status, homeUrl: d.home_url || d.homeUrl,
+    // KIOSK_BUILD.md §2★א: the specific link shown on THIS device, distinct
+    // from homeUrl (the fleet-wide default every device locks to). Empty =
+    // no override, same "falsy means not set" shape exitCode above uses.
+    displayUrl: d.display_url || d.displayUrl || '',
     allowedHost: d.allowed_host || d.allowedHost, idleReturnSeconds: d.idle_return_seconds ?? d.idleReturnSeconds ?? 0,
     lastSeen: d.last_seen || d.lastSeen,
     battery: d.battery, model: d.model, appVersion: d.app_version || d.appVersion, ip: d.ip,
@@ -415,7 +419,7 @@ function deviceCard(d) {
     ${(d.exitGestureTaps !== 5 || d.exitGestureCorner !== 'tl' || d.exitGestureHoldMs !== 0) ? `<div class="pill on" style="margin-top:4px">🤏 יציאה: ${d.exitGestureTaps} הקשות ב${esc(GESTURE_CORNER_LABELS[d.exitGestureCorner] || d.exitGestureCorner)}${d.exitGestureHoldMs ? ` + החזקה ${(d.exitGestureHoldMs / 1000).toFixed(1)}ש׳` : ''}</div>` : ''}
     ${hasAppUpdateAvailable(d) ? `<div class="pill on" style="margin-top:4px">⬆️ עדכון אפליקציה זמין (v${esc(LATEST_APP_VERSION)})</div>` : ''}
     ${d.displayOrientation && d.displayOrientation !== 'landscape' ? `<div class="pill on" style="margin-top:4px">↕️ ${esc(ORIENTATION_LABELS[d.displayOrientation] || d.displayOrientation)}</div>` : ''}
-    <div class="meta">🌐 ${esc(d.homeUrl || '—')}<br/>
+    <div class="meta">🌐 ${esc(d.homeUrl || '—')}${d.displayUrl ? `<br/>📺 מוצג במכשיר: ${esc(d.displayUrl)}` : ''}<br/>
       🔋 ${d.battery != null ? d.battery + '%' : '—'} · 📱 ${esc(d.model || '—')} · v${esc(d.appVersion || '?')}${d.displayZoomPercent && d.displayZoomPercent !== 100 ? ` · 🔍 ${d.displayZoomPercent}%` : ''}<br/>
       🕑 ${d.lastSeen ? new Date(d.lastSeen + 'Z').toLocaleString('he-IL') : 'טרם דיווח'}${d.scheduleEnabled ? `<br/>⏰ שעות פעילות: ${esc(d.scheduleOpenTime)}–${esc(d.scheduleCloseTime)}` : ''}${d.signageEnabled ? `<br/>📺 תצוגה: ${d.signageUrls.split('\n').filter(Boolean).length} קישורים / ${d.signageIntervalSeconds}ש׳` : ''}${d.paymentMode && d.paymentMode !== 'none' ? `<br/>💳 ${esc((PAYMENT_MODE_OPTIONS.find((o) => o.value === d.paymentMode) || {}).label || d.paymentMode)}` : ''}${d.accessCode ? `<br/>🚪 קוד בחירה: <b>${esc(d.accessCode)}</b>` : ''}</div>
     <div class="actions"></div></div>`);
@@ -573,7 +577,9 @@ async function editDevice(d) {
   const m = modal(`<h3>עריכת מכשיר</h3>
     <div class="field"><label>שם ידידותי</label><input id="n" value="${esc(d.name)}" /></div>
     ${linkOpts}
-    <div class="field"><label>קישור האירוע/אולם (Home URL)</label><input id="h" value="${esc(d.homeUrl || '')}" dir="ltr" /></div>
+    <div class="field"><label>אתר ראשי (Home URL) — ברירת המחדל שנועלת את המכשיר</label><input id="h" value="${esc(d.homeUrl || '')}" dir="ltr" /></div>
+    <div class="field"><label>קישור שיוצג על המכשיר (§2★א — ריק = מציג את האתר הראשי)</label>
+      <input id="disp" value="${esc(d.displayUrl || '')}" dir="ltr" placeholder="ריק = מציג את האתר הראשי" /></div>
     <div class="field"><label>דומיינים מותרים לפתיחה במכשיר</label><div id="hl"></div></div>
     <div class="field"><label>חזרה אוטומטית לקישור לאחר חוסר פעילות (שניות; 0 = כבוי)</label><input id="idle" type="number" min="0" value="${d.idleReturnSeconds || 0}" dir="ltr" /></div>
     <div class="field"><label>הגדלת תצוגה (זום): <span id="zoom-val">${d.displayZoomPercent || 100}%</span></label>
@@ -655,7 +661,7 @@ async function editDevice(d) {
     const signageEnabled = $('#sig-on', m).checked;
     const maintenanceEnabled = $('#maint-on', m).checked;
     const payChecked = m.querySelector('input[name="pay"]:checked');
-    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value),
+    const body = { name: $('#n', m).value, homeUrl: $('#h', m).value, displayUrl: $('#disp', m).value.trim(), allowedHost: hl.value(), idleReturnSeconds: Number($('#idle', m).value), exitCode: $('#ex', m).value, displayZoomPercent: Number($('#zoom', m).value),
       displayOrientation: $('#orient', m).value,
       scheduleEnabled, scheduleOpenTime: $('#sched-open', m).value, scheduleCloseTime: $('#sched-close', m).value,
       signageEnabled, signageUrls: $('#sig-urls', m).value, signageIntervalSeconds: Number($('#sig-interval', m).value),

@@ -365,7 +365,8 @@ router.post('/enrollments/:id/qr-package', requireAuth, (req, res) => {
 function publicDevice(d) {
   return {
     id: d.id, name: d.name, serial: d.serial, ownerId: d.owner_id, ownerName: d.owner_name,
-    allowedHost: d.allowed_host, homeUrl: d.home_url, idleReturnSeconds: d.idle_return_seconds,
+    allowedHost: d.allowed_host, homeUrl: d.home_url, displayUrl: d.display_url || '',
+    idleReturnSeconds: d.idle_return_seconds,
     status: d.status, online: !!d.online,
     lastSeen: d.last_seen, appVersion: d.app_version, battery: d.battery, model: d.model,
     androidVer: d.android_ver, ip: d.ip, createdAt: d.created_at, exitCode: d.exit_code || '',
