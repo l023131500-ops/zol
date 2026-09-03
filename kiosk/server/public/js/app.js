@@ -877,6 +877,74 @@ async function loadEnrollments() {
   box.querySelectorAll('[data-wiz]').forEach((b) => b.onclick = () => openInstallWizard(open.find((e) => e.id == b.dataset.wiz)));
 }
 
+// KIOSK_BUILD.md §3 Route D (USB אופליין מוחלט): loadEnrollments() above has
+// rendered a "📦 USB אופליין" button on every open code since it was added,
+// wired to this function name — which never existed, so the button threw
+// `openUsbPackageForm is not defined` and did nothing. POST
+// /enrollments/:id/usb-package (routes/devices.js) already does the real
+// work: it provisions the device row right now, from a serial read off the
+// physical unit via `adb devices`, and returns a ready-to-run .sh with every
+// policy field baked in — the only piece missing was asking for that one
+// field and calling it.
+function openUsbPackageForm(b) {
+  const id = b.dataset.usb;
+  const m = modal(`<h3>חבילת USB אופליין (מסלול D)</h3>
+    <p style="color:var(--muted)">הריצו <code dir="ltr">adb devices</code> על המכשיר המחובר למחשב, והזינו כאן את המספר הסידורי שמופיע. המכשיר יירשם לצי מיד ותקבלו קובץ הרצה (.sh) עם כל ההגדרות הנדרשות — בלי אינטרנט באירוע.</p>
+    <div class="field"><label>מספר סידורי (מ-adb devices)</label><input id="usb-serial" dir="ltr" placeholder="לדוגמה: R58N30ABCDE" /></div>
+    <div class="row"><button class="btn btn-primary" id="go">הפק והורד</button><button class="btn btn-light" id="c">ביטול</button></div>`);
+  $('#c', m).onclick = () => m.remove();
+  $('#go', m).onclick = async () => {
+    const serial = $('#usb-serial', m).value.trim();
+    if (!serial) return toast('נא להזין מספר סידורי', false);
+    const btn = $('#go', m);
+    btn.disabled = true;
+    try {
+      await downloadFile(`/enrollments/${id}/usb-package`, `kioskfleet-offline-${serial}.sh`, { method: 'POST', body: JSON.stringify({ serial }) });
+      toast('החבילה הורדה — המכשיר נרשם לצי');
+      m.remove();
+      loadEnrollments();
+    } catch (e) { toast(e.message, false); btn.disabled = false; }
+  };
+}
+
+// KIOSK_BUILD.md §3 Route A (Android + GMS, QR/zero-touch) + §10-A: the same
+// list's "📱 QR" button, also wired to a name that never existed. POST
+// /enrollments/:id/qr-package (qrprovision.js) already builds the standard
+// DevicePolicyManager QR-provisioning JSON — this only had no screen to show
+// it on. Rendered as copyable text, not drawn as an actual QR image, because
+// the payload's own warning says not to paste it into an online QR
+// generator (it carries the enrollment code) — a local/offline generator is
+// the customer's own tool, this just gets them the JSON to feed it.
+function openQrPackageForm(b) {
+  const id = b.dataset.qr;
+  const m = modal(`<h3>חבילת QR (מסלול A — Android עם GMS)</h3>
+    <p style="color:var(--muted)">אופציונלי: מלאו פרטי Wi-Fi כדי שהמכשיר יתחבר לרשת אוטומטית בזמן ההתקנה. אפשר גם להשאיר ריק ולסמוך על הרשת שהמכשיר כבר מחובר אליה.</p>
+    <div class="field"><label>שם רשת Wi-Fi (SSID)</label><input id="qr-ssid" dir="ltr" /></div>
+    <div class="field"><label>סיסמת Wi-Fi</label><input id="qr-pass" type="password" dir="ltr" /></div>
+    <div class="field"><label>אבטחה</label><select id="qr-sec"><option value="WPA">WPA/WPA2</option><option value="WEP">WEP</option><option value="NONE">ללא (רשת פתוחה)</option></select></div>
+    <div class="row"><button class="btn btn-primary" id="go">הפק JSON</button><button class="btn btn-light" id="c">ביטול</button></div>`);
+  $('#c', m).onclick = () => m.remove();
+  $('#go', m).onclick = async () => {
+    const wifiSsid = $('#qr-ssid', m).value.trim();
+    const wifiPassword = $('#qr-pass', m).value;
+    const wifiSecurityType = $('#qr-sec', m).value;
+    const btn = $('#go', m);
+    btn.disabled = true;
+    try {
+      const { payloadJson, warning } = await api(`/enrollments/${id}/qr-package`, {
+        method: 'POST',
+        body: JSON.stringify(wifiSsid ? { wifiSsid, wifiPassword, wifiSecurityType } : {}),
+      });
+      m.querySelector('.modal').innerHTML = `<h3>חבילת QR (מסלול A)</h3>
+        <p class="alert alert-warn" style="font-size:13px">${esc(warning)}</p>
+        <textarea readonly style="width:100%;height:220px;font-family:monospace;font-size:12px" dir="ltr">${esc(payloadJson)}</textarea>
+        <div class="row" style="margin-top:12px"><button class="btn btn-primary" id="cp">העתקה</button><button class="btn btn-light" id="cl">סגירה</button></div>`;
+      $('#cp', m).onclick = async () => { const ok = await copyText(payloadJson); toast(ok ? 'הועתק' : 'העתקה נכשלה — סמנו והעתיקו ידנית', ok); };
+      $('#cl', m).onclick = () => m.remove();
+    } catch (e) { toast(e.message, false); btn.disabled = false; }
+  };
+}
+
 // ── LINK LIBRARY ────────────────────────────────────────────────
 async function viewLinks() {
   $('#content').innerHTML = `<div class="topbar"><h1>ספריית קישורים</h1></div>
