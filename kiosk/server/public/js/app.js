@@ -433,6 +433,25 @@ function deviceCard(d) {
   mk('🧹 נקה מטמון', () => cmd(d, 'clear_cache'));
   mk('📸 צילום מסך', () => cmd(d, 'screenshot'));
   if (d.lastScreenshotAt) mk('🖼️ צילום אחרון', () => viewScreenshot(d));
+  // KIOSK_BUILD.md §8 "פקודות מרחוק: ... נעילה/שחרור" — commands.js's own
+  // COMMAND_TYPES ('lock'/'unlock') and KioskActivity.kt's onLock()/onUnlock()
+  // have been fully implemented on both ends since before this session (a
+  // grep of app.js turned up COMMAND_LABELS entries for both, used only to
+  // render past commands in the activity log — nothing ever issued one).
+  // 'lock' re-locks immediately with no payload, the same shape as reboot/
+  // screen_off above; 'unlock' is the one command here that takes a payload
+  // the device itself clamps (KioskActivity.onUnlock: `minutes.coerceIn(1, 120)`),
+  // so the prompt below only needs to send a number through, never validate
+  // the range itself.
+  mk('🔒 נעילה מיידית', () => confirmCmd(d, 'lock', 'לנעול את הקיוסק מיידית ולהסתיר גישת ניהול?'));
+  mk('🔓 שחרור זמני', () => promptUnlock(d));
+  // §8's "message" command (KioskActivity.onMessage) shows a full-screen
+  // overlay on the device — used for an operator note ("בהמתנה, נחזור מיד")
+  // without leaving the locked page or opening maintenance mode. An empty
+  // string is the device's own "remove the overlay" contract (onMessage:
+  // `if (text.isBlank()) removeOverlay() else showOverlay(text)`), so the
+  // same prompt doubles as "clear the message" when submitted empty.
+  mk('💬 הודעה על המסך', () => promptMessage(d));
   if (hasAppUpdateAvailable(d)) mk('⬆️ עדכן אפליקציה', () => confirmCmd(d, 'update_app', `לעדכן את המכשיר ל-v${LATEST_APP_VERSION}?`));
   mk('📋 יומן', () => viewDeviceLog(d));
   mk('🪟 חבילת Windows', () => downloadFile(`/devices/${d.id}/windows-package`, `kioskfleet-${d.serial}.ps1`).catch((e) => toast(e.message, false)));
@@ -567,6 +586,33 @@ function promptUrl(d) {
     <input id="u" value="${esc(d.homeUrl || '')}" /></div>
     <div class="row"><button class="btn btn-primary" id="go">שלח</button><button class="btn btn-light" id="c">ביטול</button></div>`);
   $('#go', m).onclick = () => { const url = $('#u', m).value.trim(); if (url) cmd(d, 'set_url', { url }); m.remove(); };
+  $('#c', m).onclick = () => m.remove();
+}
+// KIOSK_BUILD.md §8 "שחרור" — sends the 'unlock' command's one payload field,
+// `minutes`, which KioskActivity.onUnlock() itself clamps to 1–120 on the
+// device (`minutes.toLong().coerceIn(1, 120)`), so this prompt only needs a
+// plain number input, not its own range check duplicating the device's.
+function promptUnlock(d) {
+  const m = modal(`<h3>שחרור זמני</h3><p style="color:var(--muted)">מכשיר: ${esc(d.name)}. מאפשר גישת ניהול זמנית בלי קוד תחזוקה; ננעל חזרה אוטומטית בתום הזמן.</p>
+    <div class="field"><label>דקות (1–120)</label><input id="mins" type="number" min="1" max="120" value="5" dir="ltr" /></div>
+    <div class="row"><button class="btn btn-primary" id="go">שחרר</button><button class="btn btn-light" id="c">ביטול</button></div>`);
+  $('#go', m).onclick = () => {
+    const minutes = Number($('#mins', m).value);
+    if (!minutes || minutes < 1) { toast('נדרש מספר דקות תקין', false); return; }
+    cmd(d, 'unlock', { minutes }); m.remove();
+  };
+  $('#c', m).onclick = () => m.remove();
+}
+// §8 "message" — a full-screen overlay note on the device, distinct from
+// maintenance mode (maintenance takes the kiosk out of service; this stays
+// on the locked page and just adds a note over it). Submitting empty text is
+// the device's own "remove the overlay" contract (onMessage: blank text ->
+// removeOverlay()), so the same field doubles as a clear button.
+function promptMessage(d) {
+  const m = modal(`<h3>הודעה על המסך</h3><p style="color:var(--muted)">מכשיר: ${esc(d.name)}. הודעה מוצגת מעל המסך הנעול; שדה ריק מסיר הודעה קיימת.</p>
+    <div class="field"><label>טקסט ההודעה</label><textarea id="msg" style="width:100%;height:60px;font-size:13px" placeholder="לדוגמה: בהמתנה, נחזור מיד"></textarea></div>
+    <div class="row"><button class="btn btn-primary" id="go">שלח</button><button class="btn btn-light" id="c">ביטול</button></div>`);
+  $('#go', m).onclick = () => { cmd(d, 'message', { text: $('#msg', m).value.trim() }); m.remove(); };
   $('#c', m).onclick = () => m.remove();
 }
 async function editDevice(d) {
