@@ -59,6 +59,16 @@ object Prefs {
     const val EXIT_GESTURE_TAPS = "exit_gesture_taps"
     const val EXIT_GESTURE_CORNER = "exit_gesture_corner"      // "tl"|"tr"|"bl"|"br"
     const val EXIT_GESTURE_HOLD_MS = "exit_gesture_hold_ms"
+    // KIOSK_BUILD.md §9 "ניסיון יציאה מהקיוסק": showAdminDialog() compares
+    // Prefs.ADMIN_CODE entirely on-device, with no network round trip, so
+    // the server's own express-rate-limit middleware (routes/launcher.js,
+    // routes/agent.js) never sees these guesses and cannot cover them.
+    // Consecutive failures only — a correct code clears both, the same
+    // "a success clears the bucket" shape the server-side limiters' own
+    // history (see STATUS.md) already reasoned through for this exact
+    // credential class (a short code, unlimited free guesses otherwise).
+    const val ADMIN_CODE_FAIL_COUNT = "admin_code_fail_count"
+    const val ADMIN_CODE_LOCKOUT_UNTIL = "admin_code_lockout_until"  // epoch ms; unset/0 = not locked out
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 

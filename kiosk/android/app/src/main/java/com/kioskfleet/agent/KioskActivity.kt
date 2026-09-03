@@ -56,6 +56,13 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
         const val MIN_GESTURE_TAPS = 3
         const val MAX_GESTURE_TAPS = 10
         const val MAX_GESTURE_HOLD_MS = 5000L
+        // KIOSK_BUILD.md §9: local lockout for showAdminDialog()'s wrong-code
+        // guesses — same numbers as routes/agent.js's enrollLimiter (15-minute
+        // window) rather than the shorter 10-minute one, since this is a
+        // shorter, all-digits-or-letters code someone can retype every few
+        // seconds, and the whole point is to make sweeping it not worth it.
+        const val ADMIN_CODE_MAX_FAILURES = 5
+        const val ADMIN_CODE_LOCKOUT_MS = 15 * 60 * 1000L
     }
 
     private lateinit var webView: WebView
@@ -877,6 +884,18 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
     private fun showAdminDialog() {
         val code = Prefs.get(this, Prefs.ADMIN_CODE)
         if (code.isEmpty()) { toast("קוד תחזוקה לא הוגדר. השתמשו בפקודת פתיחה מרחוק."); return }
+        // KIOSK_BUILD.md §9: this comparison runs fully offline, so nothing
+        // server-side (routes/agent.js's enrollLimiter, routes/launcher.js's
+        // launcherLimiter) ever sees these guesses. Checked *before* the
+        // dialog opens — a locked-out attacker gets one line of feedback, not
+        // a live input box inviting the next guess.
+        val lockoutUntil = Prefs.get(this, Prefs.ADMIN_CODE_LOCKOUT_UNTIL).toLongOrNull() ?: 0L
+        val remainingMs = lockoutUntil - System.currentTimeMillis()
+        if (remainingMs > 0) {
+            val remainingMin = (remainingMs / 60_000L) + 1
+            toast("יותר מדי ניסיונות. נסו שוב בעוד $remainingMin דקות.")
+            return
+        }
         val input = EditText(this).apply {
             hint = "קוד תחזוקה"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -890,7 +909,25 @@ class KioskActivity : AppCompatActivity(), CommandHandler {
                 // about what happened here.
                 val ok = input.text.toString() == code
                 if (::agent.isInitialized) agent.reportExitAttempt(ok)
-                if (ok) onUnlock(10) else toast("קוד שגוי")
+                if (ok) {
+                    // A success clears the bucket — the person standing here
+                    // just proved they hold the code, so the next wrong guess
+                    // (by someone else, later) starts counting from zero.
+                    Prefs.set(this, Prefs.ADMIN_CODE_FAIL_COUNT, "0")
+                    Prefs.set(this, Prefs.ADMIN_CODE_LOCKOUT_UNTIL, "0")
+                    onUnlock(10)
+                } else {
+                    val fails = (Prefs.get(this, Prefs.ADMIN_CODE_FAIL_COUNT).toIntOrNull() ?: 0) + 1
+                    if (fails >= ADMIN_CODE_MAX_FAILURES) {
+                        Prefs.set(this, Prefs.ADMIN_CODE_FAIL_COUNT, "0")
+                        Prefs.set(this, Prefs.ADMIN_CODE_LOCKOUT_UNTIL,
+                            (System.currentTimeMillis() + ADMIN_CODE_LOCKOUT_MS).toString())
+                        toast("יותר מדי ניסיונות. נסו שוב בעוד ${ADMIN_CODE_LOCKOUT_MS / 60_000L} דקות.")
+                    } else {
+                        Prefs.set(this, Prefs.ADMIN_CODE_FAIL_COUNT, fails.toString())
+                        toast("קוד שגוי")
+                    }
+                }
             }
             .setNegativeButton("ביטול", null).show()
     }
