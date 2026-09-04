@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <!-- מצב כהה (DESIGN_STANDARD §3) — אותו תסריט בדיוק כמו console.html,
+       כדי שדף שנפתח על מסך קיוסק בהיר או כהה לא יהבהב לבן. -->
+  <script>
+    (function () {
+      var KEY = "kiosk-theme";
+      var mq = window.matchMedia("(prefers-color-scheme: dark)");
+      var apply = function (dark) {
+        document.documentElement.classList.toggle("dark", dark);
+      };
+      var stored = null;
+      try { stored = localStorage.getItem(KEY); } catch (e) {}
+      if (stored === "dark" || stored === "light") {
+        apply(stored === "dark");
+      } else {
+        apply(mq.matches);
+        mq.addEventListener
+          ? mq.addEventListener("change", function (e) { apply(e.matches); })
+          : mq.addListener(function (e) { apply(e.matches); });
+      }
+    })();
+  </script>
+  <title>KioskFleet — בחירת יעד</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* KIOSK_BUILD.md §2★ז — הדף הזה נפתח על מסך קיוסק (טלפון/טאבלט/מסך
+       גדול), לא בדפדפן שולחן-עבודה, ולכן הכפתורים גדולים ומלאי-רוחב במקום
+       רשימת כרטיסי-ניהול קטנים כמו console.html. */
+    body.launcher-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+    .launcher-wrap { width: 100%; max-width: 560px; }
+    .launcher-title { text-align: center; margin-bottom: 22px; font-size: 22px; font-weight: 800; }
+    .launcher-list { display: flex; flex-direction: column; gap: 12px; }
+    .launch-item {
+      display: flex; align-items: center; gap: 14px; width: 100%;
+      background: var(--card); border: 2px solid var(--line); border-radius: var(--radius);
+      padding: 18px 20px; font-family: inherit; font-size: 18px; font-weight: 700;
+      color: var(--ink); cursor: pointer; box-shadow: var(--shadow); text-align: right;
+      transition: .15s;
+    }
+    .launch-item:hover, .launch-item:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
+    .launch-item img { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; flex: none; }
+    .launcher-status { text-align: center; color: var(--muted); padding: 20px 0; }
+    .launcher-status.error { color: var(--danger); font-weight: 600; }
+  </style>
+</head>
+<body class="launcher-body">
+  <div class="launcher-wrap">
+    <h1 class="launcher-title" id="launcher-title">בחרו יעד</h1>
+    <div id="launcher-items"><p class="launcher-status">טוען…</p></div>
+  </div>
+  <script src="js/launcher.js"></script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+import express from 'express';
+import { db, logEvent } from '../db.js';
+import { requireAdmin, hashPassword } from '../auth.js';
+import { disconnectConsole } from '../hub.js';
+import { validateFullName } from '../users.js';
+import { validateUsername, validatePassword } from '../credentials.js';
+
+// Super-admin only. Manage customer accounts and see the whole fleet.
+const router = express.Router();
+
+router.get('/stats', requireAdmin, (req, res) => {
+  const users = db.prepare("SELECT COUNT(*) c FROM users WHERE role = 'user'").get().c;
+  const devices = db.prepare('SELECT COUNT(*) c FROM devices').get().c;
+  const online = db.prepare('SELECT COUNT(*) c FROM devices WHERE online = 1').get().c;
+  res.json({ stats: { users, devices, online, offline: devices - online } });
+});
+
+router.get('/users', requireAdmin, (req, res) => {
+  const rows = db.prepare(`SELECT u.id, u.username, u.full_name, u.role, u.device_limit, u.active, u.created_at,
+      (SELECT COUNT(*) FROM devices d WHERE d.owner_id = u.id) AS devices_used
+    FROM users u ORDER BY u.id`).all();
+  res.json({ users: rows });
+});
+
+router.post('/users', requireAdmin, (req, res) => {
+  const { username, password, fullName, deviceLimit, role } = req.body || {};
+  const userCheck = validateUsername(username);
+  if (!userCheck.ok) return res.status(400).json({ error: userCheck.error });
+  const passCheck = validatePassword(password);
+  if (!passCheck.ok) return res.status(400).json({ error: passCheck.error });
+  const nameCheck = validateFullName(fullName);
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(userCheck.value))
+    return res.status(409).json({ error: 'שם המשתמש כבר קיים' });
+  const info = db.prepare('INSERT INTO users (username, password_hash, full_name, role, device_limit) VALUES (?, ?, ?, ?, ?)')
+    .run(userCheck.value, hashPassword(passCheck.value), nameCheck.value ?? null,
+         role === 'admin' ? 'admin' : 'user', Math.max(1, Number(deviceLimit) || 1));
+  logEvent(null, req.user.id, 'user_created', userCheck.value);
+  res.json({ user: db.prepare('SELECT id, username, full_name, role, device_limit, active FROM users WHERE id = ?').get(info.lastInsertRowid) });
+});
+
+router.patch('/users/:id', requireAdmin, (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.sendStatus(404);
+  const { fullName, deviceLimit, active, role } = req.body || {};
+  const nameCheck = validateFullName(fullName);
+  if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+  db.prepare('UPDATE users SET full_name = COALESCE(?, full_name), device_limit = COALESCE(?, device_limit), active = COALESCE(?, active), role = COALESCE(?, role) WHERE id = ?')
+    .run(nameCheck.value ?? null, deviceLimit != null ? Math.max(1, Number(deviceLimit)) : null,
+         active != null ? (active ? 1 : 0) : null,
+         role ? (role === 'admin' ? 'admin' : 'user') : null, user.id);
+  // A deactivation must also end any console socket this user already has
+  // open — otherwise it keeps streaming their own device_update frames for
+  // the rest of the JWT's life, the exact gap hub.js's /ws/console connect
+  // check exists to close for a *new* socket.
+  if (active != null && !active) disconnectConsole(user.id);
+  logEvent(null, req.user.id, 'user_updated', user.username);
+  res.json({ user: db.prepare('SELECT id, username, full_name, role, device_limit, active FROM users WHERE id = ?').get(user.id) });
+});
+
+router.post('/users/:id/reset-password', requireAdmin, (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.sendStatus(404);
+  const { password } = req.body || {};
+  const passCheck = validatePassword(password);
+  if (!passCheck.ok) return res.status(400).json({ error: 'סיסמה חייבת להיות 8 תווים לפחות' });
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(passCheck.value), user.id);
+  logEvent(null, req.user.id, 'password_reset', user.username);
+  res.json({ ok: true });
+});
+
+router.delete('/users/:id', requireAdmin, (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.sendStatus(404);
+  if (user.id === req.user.id) return res.status(400).json({ error: 'לא ניתן למחוק את החשבון שלך' });
+  db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+  disconnectConsole(user.id);
+  logEvent(null, req.user.id, 'user_deleted', user.username);
+  res.json({ ok: true });
+});
+
+export default router;

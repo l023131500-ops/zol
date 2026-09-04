@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <!-- מצב כהה (DESIGN_STANDARD §3). הערכה יושבת ב-css/style.css כ-
+       :root.dark; כאן מדליקים אותה. בתוך ה-<head> ולפני הציור הראשון,
+       ולכן אין הבזק לבן בדרך מדף הבית הכהה של more30. -->
+  <script>
+    (function () {
+      var mq = window.matchMedia("(prefers-color-scheme: dark)");
+      var apply = function (dark) {
+        document.documentElement.classList.toggle("dark", dark);
+      };
+      apply(mq.matches);
+      mq.addEventListener
+        ? mq.addEventListener("change", function (e) { apply(e.matches); })
+        : mq.addListener(function (e) { apply(e.matches); });
+    })();
+  </script>  <title>KioskFleet — יצרנית קיוסקים: מכשיר שפותח רק מה שאישרתם</title>
+  <meta name="description" content="הופכים כל מכשיר — אנדרואיד, Windows או USB אופליין מוחלט — לקיוסק נעול על רשימת כתובות מאושרות, עם תשלום מאובטח, תצוגת מולטימדיה ומיתוג ללקוח. גם בלי רשת. שליטה מרחוק ממסך אחד." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Off the paint path: Lighthouse charged 480ms of render-blocking to this
+       request, and NetFree intermittently blocks fonts.googleapis.com entirely —
+       in which case a blocking stylesheet holds the whole page until it fails.
+       The fallback stack is declared in style.css, so the page reads immediately. -->
+  <link id="webfonts" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet" media="print" />
+  <!-- ⚠️ NOT an onload="" attribute. This server sends a CSP with
+       script-src-attr 'none' (helmet's default), which blocks inline event
+       handlers outright — the swap silently never ran and the page rendered
+       with no web fonts at all, while logging a CSP violation to the console.
+       A <script> block is allowed here because script-src includes
+       'unsafe-inline', so this does the same job within the policy. -->
+  <script>
+    (function () {
+      var l = document.getElementById('webfonts');
+      if (!l) return;
+      var show = function () { l.media = 'all'; };
+      if (l.sheet) show(); else l.addEventListener('load', show);
+    })();
+  </script>
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
+  <!-- Document-relative, not root-relative: this page is served both at the
+       root (Railway URL, local dev) and under more30.com/kiosk/. A leading
+       slash would send the browser to more30.com/css/style.css. -->
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- The platform-wide login pill. One file, loaded by every more30 system. -->
+  <script src="https://more30.com/auth-button.js" defer></script>
+</head>
+<body>
+  <!-- Paired with the <main> landmark below: a screen reader can now offer
+       "skip to main content" instead of walking the nav on every load. -->
+  <a class="skip" href="#main">דילוג לתוכן הראשי</a>
+  <header class="nav">
+    <div class="container">
+      <div class="brand"><span class="logo">◈</span> KioskFleet</div>
+      <nav class="nav-links">
+        <a href="#what">מה זה עושה</a>
+        <a href="#routes">מסלולי התקנה</a>
+        <a href="#features">יכולות</a>
+        <a href="#how">איך מתחילים</a>
+        <a href="#pricing">מחירים</a>
+        <a href="console" class="btn btn-ghost btn-sm">כניסת לקוחות</a>
+      </nav>
+    </div>
+  </header>
+
+
+  <main id="main">
+  <section class="hero">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+      <h1>מכשיר שפותח<br/>רק מה שאישרתם</h1>
+      <p class="lead">
+        אתם קובעים רשימת כתובות מותרות — אחת או כמה. המכשיר נעול עליהן בלבד:
+        אין דפדפן חופשי, אין יציאה למסך הבית, אין הפתעות. וכשאין רשת, הנעילה
+        ממשיכה להחזיק בדיוק אותו דבר. עובד על אנדרואיד (עם או בלי גוגל), על
+        Windows, ואפילו בלי אינטרנט בכלל דרך USB — אותה מערכת ניהול לכולם.
+      </p>
+      <div class="hero-cta">
+        <a href="console" class="btn btn-primary">כניסה למערכת הניהול</a>
+        <a href="#how" class="btn btn-ghost">איך מתחילים?</a>
+      </div>
+      <div class="hero-badges">
+        <div><b>4 מסלולי התקנה</b> אנדרואיד / Windows / USB אופליין</div>
+        <div><b>גם בלי רשת</b> הנעילה מחזיקה</div>
+        <div><b>מרחוק</b> שינוי בזמן אמת</div>
+        <div><b>לפי לקוח</b> מיתוג ואתר תדמית נפרדים</div>
+      </div>
+      </div>
+      <!-- Illustrative graphic (DESIGN MANDATE): a locked kiosk tablet showing
+           approved tiles, one deliberately blocked tile, plus badges for
+           "verified device" and "works offline" — a picture of the hero copy
+           above, not a stock photo or plain icon. -->
+      <div class="hero-visual" aria-hidden="true">
+        <svg class="hero-illustration" viewBox="0 0 440 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="קיוסק נעול המציג קישורים מאושרים בלבד">
+          <defs>
+            <radialGradient id="heroGlow" cx="50%" cy="35%" r="65%">
+              <stop offset="0%" stop-color="#2a61e8" stop-opacity=".55"/>
+              <stop offset="100%" stop-color="#2a61e8" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="tileGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#eef3ff"/>
+              <stop offset="100%" stop-color="#dbe6ff"/>
+            </linearGradient>
+          </defs>
+          <circle cx="220" cy="190" r="200" fill="url(#heroGlow)"/>
+          <rect x="190" y="378" width="60" height="16" rx="8" fill="#0d284a"/>
+          <rect x="212" y="326" width="16" height="56" rx="6" fill="#123563"/>
+          <rect x="70" y="36" width="300" height="300" rx="28" fill="#123563" stroke="#22c55e" stroke-width="2"/>
+          <rect x="90" y="56" width="260" height="260" rx="16" fill="#f5f7fb"/>
+          <path d="M90 72a16 16 0 0 1 16-16h228a16 16 0 0 1 16 16v24H90z" fill="#0d284a"/>
+          <g transform="translate(112,64)">
+            <rect x="0" y="7" width="16" height="12" rx="3" fill="#22c55e"/>
+            <path d="M3 7V4a5 5 0 0 1 10 0v3" fill="none" stroke="#22c55e" stroke-width="2.4" stroke-linecap="round"/>
+          </g>
+          <g transform="translate(303,66)">
+            <rect x="0" y="10" width="4" height="8" rx="1.5" fill="#8fd6ff"/>
+            <rect x="7" y="6" width="4" height="12" rx="1.5" fill="#8fd6ff"/>
+            <rect x="14" y="2" width="4" height="16" rx="1.5" fill="#8fd6ff"/>
+            <line x1="-3" y1="1" x2="21" y2="19" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round"/>
+          </g>
+          <rect x="106" y="112" width="104" height="74" rx="12" fill="url(#tileGrad)"/>
+          <circle cx="158" cy="149" r="16" fill="none" stroke="#2a61e8" stroke-width="3"/>
+          <rect x="230" y="112" width="104" height="74" rx="12" fill="url(#tileGrad)"/>
+          <rect x="264" y="136" width="36" height="26" rx="4" fill="none" stroke="#2a61e8" stroke-width="3"/>
+          <rect x="106" y="196" width="104" height="74" rx="12" fill="url(#tileGrad)"/>
+          <path d="M132 233h52M132 245h34" stroke="#2a61e8" stroke-width="3" stroke-linecap="round"/>
+          <rect x="230" y="196" width="104" height="74" rx="12" fill="none" stroke="#c9d6ee" stroke-width="2" stroke-dasharray="6 6"/>
+          <g transform="translate(270,215)">
+            <rect x="0" y="9" width="20" height="15" rx="3" fill="#c9d6ee"/>
+            <path d="M4 9V5a6 6 0 0 1 12 0v4" fill="none" stroke="#c9d6ee" stroke-width="3" stroke-linecap="round"/>
+          </g>
+          <rect x="190" y="298" width="60" height="6" rx="3" fill="#c9d6ee"/>
+          <g transform="translate(30,26)">
+            <rect x="0" y="0" width="112" height="40" rx="20" fill="#22c55e"/>
+            <path d="M22 20l6 6 12-14" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <g transform="translate(300,362)">
+            <rect x="0" y="0" width="112" height="40" rx="20" fill="#0d284a" stroke="#2a61e8" stroke-width="1.5"/>
+            <circle cx="26" cy="20" r="5" fill="#2a61e8"/>
+            <path d="M38 20a12 12 0 0 1-.1 3" fill="none" stroke="#2a61e8" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M44 20a18 18 0 0 1-.1 5" fill="none" stroke="#2a61e8" stroke-width="2.5" stroke-linecap="round" opacity=".6"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- The product in one screen. Someone who lands here is deciding whether
+       this is the category of thing they were looking for. -->
+  <section class="section" id="what">
+    <div class="container">
+      <h2>מה זה בעצם עושה</h2>
+      <p class="sub">מכשיר אחד, רשימה אחת של כתובות מותרות, ושליטה עליה מרחוק.</p>
+      <div class="grid grid-3">
+        <div class="feature">
+          <div class="ico">📝</div><h3>אתם מגדירים את הרשימה</h3>
+          <p>מוסיפים כתובות מותרות אחת-אחת במסך הניהול — האתר הראשי, שער התשלום,
+             כל מה שצריך. אפשר לערוך ולהסיר בכל רגע. תת-דומיינים נכללים מאליהם.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">🔒</div><h3>המכשיר נועל את עצמו על הרשימה</h3>
+          <p>כתובת שאינה ברשימה פשוט לא נפתחת. כפתורי Home / Back / Recents
+             חסומים, והיציאה ממצב קיוסק דורשת קוד ניהול.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">📴</div><h3>גם כשאין רשת</h3>
+          <p>הנעילה נאכפת על המכשיר עצמו ולא בשרת, ולכן ניתוק אינטרנט לא פותח
+             אותו. פקודות שנשלחו בינתיים ממתינות ומתבצעות ברגע שהוא חוזר.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- KIOSK_BUILD.md §3 — the four install routes are the actual product
+       category ("יצרנית קיוסקים"), not an implementation detail, so a
+       first-time visitor needs to see them before deciding this fits their
+       hardware. Kept to the same .feature/.grid-4 pattern the rest of the
+       page already uses — no new CSS. -->
+  <section class="section" id="routes">
+    <div class="container">
+      <h2>כל סוג מכשיר, אותה מערכת</h2>
+      <p class="sub">בוחרים את המכשיר שיש לכם — המערכת בוחרת את מסלול ההתקנה הנכון ומפיקה את הפקודה או החבילה בלחיצה.</p>
+      <div class="grid grid-4">
+        <div class="feature"><div class="ico">🅰️</div><h3>אנדרואיד עם Google</h3><p>רישום קל בסריקת QR או Zero-touch — מתאים למכשירים איכותיים עם Play מאושר.</p></div>
+        <div class="feature"><div class="ico">🅱️</div><h3>אנדרואיד גנרי / סיני</h3><p>המסלול העיקרי לצי המיובא: התקנה חד-פעמית ב-ADB, אחר כך נעול ומנוהל לגמרי אופליין.</p></div>
+        <div class="feature"><div class="ico">🪟</div><h3>Windows</h3><p>חבילת קיוסק למסכים גדולים באולמות וחנויות — Assigned Access או Shell Launcher, הרצה כמנהל וזהו.</p></div>
+        <div class="feature"><div class="ico">💾</div><h3>USB אופליין מוחלט</h3><p>חבילת התקנה שנצרבת ל-USB ורצה בלי אינטרנט בכלל — לאתרים בלי חיבור קבוע.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features" style="background:#fff;">
+    <div class="container">
+      <h2>שליטה מלאה. מכל מקום.</h2>
+      <p class="sub">כל מה שצריך כדי לתפעל מכשיר בשטח — בלי לגעת בו פיזית.</p>
+      <div class="grid grid-3">
+        <div class="feature"><div class="ico">🌐</div><h3>ספריית קישורים</h3><p>שומרים את הכתובות שחוזרות — אולם, אירוע, טופס — עם הדומיינים המותרים שלהן, ומצמידים אותן למכשיר בלחיצה.</p></div>
+        <div class="feature"><div class="ico">📡</div><h3>פקודות מרחוק לפי מספר סידורי</h3><p>אתחול, רענון, החלפת כתובת, כיבוי והדלקת מסך וניקוי מטמון — לכל מכשיר בנפרד, בזמן אמת.</p></div>
+        <div class="feature"><div class="ico">↩️</div><h3>חזרה אוטומטית</h3><p>אחרי זמן חוסר פעילות שאתם קובעים, המכשיר חוזר לבד לכתובת הראשית — כדי שהמבקר הבא יתחיל מהתחלה.</p></div>
+        <div class="feature"><div class="ico">⚡</div><h3>הפעלה אוטומטית</h3><p>המכשיר עולה עם ההדלקה, חוזר לאתר אחרי קריסה, והמסך נשאר דלוק.</p></div>
+        <div class="feature"><div class="ico">🩺</div><h3>ניטור בזמן אמת</h3><p>מחובר או מנותק, סוללה, דגם, גרסה וכתובת IP — עם היסטוריית אירועים לכל מכשיר.</p></div>
+        <div class="feature"><div class="ico">👥</div><h3>ניהול רב-משתמשים</h3><p>כל לקוח עם חשבון ומכסת מכשירים משלו. מנהל-על רואה ושולט בצי כולו.</p></div>
+        <div class="feature"><div class="ico">🏷️</div><h3>מיתוג ללקוח</h3><p>רושמים ללקוחות שלכם מזהה, קישור ואתר תדמית משלהם — במכשיר מספיק להקליד את המזהה כדי שהתצוגה הנכונה תיפתח.</p></div>
+        <div class="feature"><div class="ico">🖼️</div><h3>תצוגת מולטימדיה (Digital Signage)</h3><p>רוטציית תמונות ותוכן כשאין אינטראקציה — מתאים למסכי פרסום וקבלת פנים.</p></div>
+        <div class="feature"><div class="ico">💳</div><h3>תשלום מאובטח (טסט)</h3><p>הקלדה ידנית, קורא שמזין ספרות בלבד, או מסופון EMV מוצפן — בלי לשמור מספר כרטיס בשום מצב.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="container">
+      <h2>מתחילים ב-4 צעדים</h2>
+      <p class="sub">מהכניסה ועד מכשיר נעול בשטח — תוך דקות.</p>
+      <!-- Illustrative graphic (DESIGN MANDATE): the six-digit code from step 3
+           pairing with the device, which then shows as locked/activated. -->
+      <div class="how-visual" aria-hidden="true">
+        <svg class="how-illustration" viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="הזנת קוד רישום בן שש ספרות מפעילה נעילה על המכשיר">
+          <rect x="20" y="60" width="150" height="180" rx="20" fill="var(--card)" stroke="var(--line)" stroke-width="2"/>
+          <rect x="40" y="90" width="110" height="26" rx="8" fill="#eef3ff"/>
+          <g fill="#2a61e8">
+            <rect x="48" y="97" width="12" height="12" rx="2"/>
+            <rect x="66" y="97" width="12" height="12" rx="2"/>
+            <rect x="84" y="97" width="12" height="12" rx="2"/>
+            <rect x="102" y="97" width="12" height="12" rx="2"/>
+            <rect x="120" y="97" width="12" height="12" rx="2"/>
+            <rect x="138" y="97" width="4" height="12" rx="2" opacity=".3"/>
+          </g>
+          <rect x="40" y="140" width="110" height="14" rx="7" fill="#eef3ff"/>
+          <rect x="40" y="162" width="70" height="14" rx="7" fill="#eef3ff"/>
+          <circle cx="95" cy="212" r="14" fill="#22c55e"/>
+          <path d="M88 212l5 5 9-10" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M180 150h100" stroke="var(--line)" stroke-width="3" stroke-dasharray="8 8" fill="none"/>
+          <circle cx="240" cy="150" r="20" fill="var(--card)" stroke="#2a61e8" stroke-width="2.5"/>
+          <path d="M232 150a8 8 0 0 1 16 0" fill="none" stroke="#2a61e8" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="240" cy="158" r="2.4" fill="#2a61e8"/>
+          <rect x="300" y="40" width="160" height="220" rx="22" fill="#123563"/>
+          <rect x="314" y="54" width="132" height="150" rx="12" fill="#f5f7fb"/>
+          <g transform="translate(340,80)">
+            <rect x="0" y="0" width="80" height="40" rx="10" fill="#eef3ff"/>
+            <rect x="0" y="52" width="80" height="18" rx="6" fill="#eef3ff"/>
+            <rect x="0" y="80" width="52" height="18" rx="6" fill="#eef3ff"/>
+          </g>
+          <rect x="330" y="218" width="100" height="10" rx="5" fill="#22c55e"/>
+          <g transform="translate(410,44)">
+            <circle cx="0" cy="0" r="16" fill="#22c55e"/>
+            <path d="M-6 0l4 4 8-8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+        </svg>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="n"></div><div><h3>נכנסים למערכת</h3><p>מתחברים למסך הניהול עם החשבון שלכם.</p></div></div>
+        <div class="step"><div class="n"></div><div><h3>מגדירים את הרשימה</h3><p>בוחרים את הכתובת הראשית ומוסיפים את שאר הכתובות המותרות — למשל שער תשלום.</p></div></div>
+        <div class="step"><div class="n"></div><div><h3>מתקינים ומזינים קוד</h3><p>מתקינים את אפליקציית KioskFleet Agent על המכשיר ומקלידים את קוד הרישום בן שש הספרות.</p></div></div>
+        <div class="step"><div class="n"></div><div><h3>שולטים מרחוק</h3><p>המכשיר מופיע בדשבורד. משם משנים את הרשימה, מחליפים כתובת ומאתחלים — מכל מקום.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="pricing" style="background:#fff;">
+    <div class="container">
+      <h2>תוכניות פשוטות</h2>
+      <p class="sub">משלמים לפי מספר המכשירים. מנהל-העל קובע את המכסה לכל לקוח.</p>
+      <div class="pricing">
+        <div class="plan"><h3>Starter</h3><div class="price">₪49<small>/חודש</small></div><ul><li>עד 3 מכשירים</li><li>רשימת כתובות מלאה</li><li>שליטה מרחוק</li><li>תמיכה במייל</li></ul><a href="console" class="btn btn-light">התחלה</a></div>
+        <div class="plan featured"><h3>Business</h3><div class="price">₪149<small>/חודש</small></div><ul><li>עד 15 מכשירים</li><li>ספריית קישורים</li><li>מיתוג ואתר תדמית ללקוח</li><li>ניטור והיסטוריה</li><li>תמיכה מועדפת</li></ul><a href="console" class="btn btn-primary">הנפוץ ביותר</a></div>
+        <div class="plan"><h3>Enterprise</h3><div class="price">מותאם</div><ul><li>מכשירים ללא הגבלה</li><li>Windows + USB אופליין</li><li>תצוגת מולטימדיה ותשלום</li><li>מנהל-על ייעודי</li><li>SLA ותמיכה טלפונית</li></ul><a href="console" class="btn btn-light">דברו איתנו</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="cta-band">
+        <!-- Illustrative graphic (DESIGN MANDATE): a fleet of devices connected
+             to one control hub — the "מרחוק, מכל מקום" promise of the CTA. -->
+        <div class="cta-visual" aria-hidden="true">
+          <svg class="cta-illustration" viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="צי מכשירים המחוברים לשליטה מרכזית אחת">
+            <circle cx="180" cy="130" r="34" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="2"/>
+            <circle cx="180" cy="130" r="8" fill="#fff"/>
+            <circle cx="180" cy="130" r="55" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2" stroke-dasharray="4 8"/>
+            <circle cx="180" cy="130" r="80" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="2" stroke-dasharray="4 8"/>
+            <path d="M180 130L65 55" stroke="rgba(255,255,255,.5)" stroke-width="2" stroke-dasharray="5 6"/>
+            <path d="M180 130L295 75" stroke="rgba(255,255,255,.5)" stroke-width="2" stroke-dasharray="5 6"/>
+            <path d="M180 130L180 200" stroke="rgba(255,255,255,.5)" stroke-width="2" stroke-dasharray="5 6"/>
+            <g transform="translate(30,10)">
+              <rect width="70" height="90" rx="12" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="1.6"/>
+              <rect x="10" y="12" width="50" height="50" rx="6" fill="rgba(255,255,255,.25)"/>
+              <circle cx="60" cy="8" r="5" fill="#22c55e"/>
+            </g>
+            <g transform="translate(260,30)">
+              <rect width="70" height="90" rx="12" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="1.6"/>
+              <rect x="10" y="12" width="50" height="50" rx="6" fill="rgba(255,255,255,.25)"/>
+              <circle cx="60" cy="8" r="5" fill="#22c55e"/>
+            </g>
+            <g transform="translate(145,180)">
+              <rect width="70" height="90" rx="12" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="1.6"/>
+              <rect x="10" y="12" width="50" height="50" rx="6" fill="rgba(255,255,255,.25)"/>
+              <circle cx="60" cy="8" r="5" fill="#22c55e"/>
+            </g>
+          </svg>
+        </div>
+        <h2>מוכנים לנעול את המכשיר הראשון?</h2>
+        <p style="font-size:18px;opacity:.92;">היכנסו למערכת הניהול, הגדירו את רשימת הכתובות והנפיקו קוד רישום.</p>
+        <a href="console" class="btn btn-ghost" style="border-color:#fff;">כניסה למערכת ←</a>
+      </div>
+    </div>
+  </section>
+
+  </main>
+
+
+
+  <footer class="footer">
+    <div class="container">
+      <div class="brand" style="justify-content:center;margin-bottom:10px;"><span class="logo">◈</span> KioskFleet</div>
+      <!-- Says Android because that is the agent that exists. Naming platforms
+           we do not ship an agent for would be a promise the product cannot keep. -->
+      <p>נעילת מכשירי אנדרואיד לכתובות מאושרות · חלק מ-<a href="https://more30.com" style="color:inherit;text-decoration:underline">more30.com</a> · &copy; 2026</p>
+    </div>
+  </footer>
+</body>
+</html>
